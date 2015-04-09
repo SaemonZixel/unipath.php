@@ -793,6 +793,20 @@ if(isset($_GET['test_uniPath'])) {
 	uni($unipath.'/assertEqu()', array('u_login' => 'test', 'u_password_hash' => 123, 'password2' => '123', 'submitted' => 1));
 // echo '<xmp>';
 
+	$unipath = "/_POST/.[. > 100 and . < 124]";
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+	assert('$result == array("u_password_hash" => 123, "password2" => "123"); /* '.json_encode($result).' */');
+// echo '<xmp>';
+
+
+	$_POST[] = array('DataXML' => array('zemucharea' => 'Лазаревский', 'priceuch' => 0));
+	$_POST[] = array('DataXML' => array('zemucharea' => 'Лазаревский', 'priceuch' => 123));
+	$unipath = "/_POST/.[1=1 and (DataXML/zemucharea = 'Лазаревский' or DataXML/zemucharea = 'Хостинский') and DataXML/priceuch <= 0]";
+	echo "<h3>--- $unipath ---</h3>";
+	uni($unipath.'/assertEqu()', array(array('DataXML' => array('zemucharea' => 'Лазаревский', 'priceuch' => 0))));
+
 // $GLOBALS['unipath_debug'] = true;
 	$_POST = array(array('vers.Data' => '<Data><zemuch><a>123</a></zemuch></Data>'), array('vers.Data' => '<Data><zemuch><a>321</a></zemuch></Data>'));
 	$unipath = "/_POST/set(*/DataXML, */vers.Data/XMLtoArray()/Data/zemuch)";
@@ -801,9 +815,148 @@ if(isset($_GET['test_uniPath'])) {
 	uni($unipath.'/assertEqu()', array('vers.Data' => '<Data><zemuch><a>123</a></zemuch></Data>', 'DataXML' => array('a' => 123)), array('vers.Data' => '<Data><zemuch><a>321</a></zemuch></Data>', 'DataXML' => array('a' => 321)));
 // echo '</xmp>';
 
-	$_POST = array(array('DataXML' => array('zemucharea' => 'Лазаревский', 'priceuch' => 0)), array('DataXML' => array('zemucharea' => 'Лазаревский', 'priceuch' => 123)));
-	$unipath = "/_POST/.[1=1 and (DataXML/zemucharea = 'Лазаревский' or DataXML/zemucharea = 'Хостинский') and DataXML/priceuch <= 0]";
+//$GLOBALS['unipath_debug'] = true;
+	$unipath = "/_POST/0/vers.Data/asXML()/Data/0/zemuch/0";
 	echo "<h3>--- $unipath ---</h3>";
-	uni($unipath.'/assertEqu()', array(array('DataXML' => array('zemucharea' => 'Лазаревский', 'priceuch' => 0))));
+//echo '<xmp>';
+	$result = uni($unipath);
+// print_r($result);
+	assert('$result == "<a>123</a>"; /* '.print_r($result, true).' */');
+//echo '</xmp>';
+//unset($GLOBALS['unipath_debug']);
+
+	$_POST['test_xml'] = '<?xml version="1.0" encoding="UTF-8"?><html>
+		<head><title>test_xml</title></head>
+		<body>
+			<h1>H1</h1>
+			<p>paragraph 1</p>
+			<h1>H1 second</h1>
+			<p>paragraph 2</p>
+		</body></html>';
+	$unipath = '/_POST/test_xml/asXML()/html/0/head/0/title/0';
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$result = uni($unipath);
+//print_r($result);
+	assert('$result == "test_xml"; /* '.json_encode($result).' */');
+//$GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+	$_POST['test_xml'] = '<text:h text:style-name="Heading_20_1" outline-level=1>3-комн квартира на ул Труда</text:h><text:p text:style-name="Text_20_body">Улица: Труда</text:p><text:p text:style-name="Text_20_body">Общая площадь: 85 м² </text:p><text:p text:style-name="Text_20_body">Этажность: 12 </text:p><text:p text:style-name="Text_20_body">Этаж: 6 </text:p><text:p text:style-name="Text_20_body">Цена: <text:span text:style-name="T1">5800000</text:span> руб. </text:p><text:p text:style-name="Standard"/><table:table table:name="ХарактеристикиОбъекта" table:style-name="ХарактеристикиОбъекта"><table:table-column table:style-name="ХарактеристикиОбъекта.A"/><table:table-column table:style-name="ХарактеристикиОбъекта.B"/><table:table-row><table:table-cell office:value-type="string"><text:p text:style-name="P1">Район</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p text:style-name="P2">Центральный</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell 
+	office:value-type="string"><text:p 
+text:style-name="P1">Улица</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p text:style-name="P2">Театральная 11</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell office:value-type="string"><text:p text:style-name="P1">Класс</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p text:style-name="P2">премиум</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell office:value-type="string"><text:p text:style-name="P1">Кол-во этажей</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p text:style-name="P2">9</text:p></table:table-cell></table:table-row></table:table><text:p/>';
+	$unipath = '/_POST/test_xml/asXML()/h/0';
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$result = uni($unipath);
+//print_r($result);
+	assert('$result == "3-комн квартира на ул Труда"; /* '.json_encode($result).' */');
+//$GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+	$unipath = '/_POST/test_xml/asXML()/p/4';
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$result = uni($unipath);
+//print_r($result);
+	assert('$result == "Цена: <text:span text:style-name=\"T1\">5800000</text:span> руб. "; /* '.json_encode($result).' */');
+//$GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	@mkdir('unipath_test');
+	$GLOBALS['dirname'] = 'unipath_test';
+	file_put_contents('unipath_test/unipath_test.xml', $_POST['test_xml']);
+	$unipath = '$dirname/asDirectory()/unipath_test.xml/contents()';
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert("\$result == \$_POST['test_xml']; /* ".json_encode($result)." */");
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$GLOBALS['filename'] = 'unipath_test.xml';
+	file_put_contents('unipath_test.xml', $_POST['test_xml']);
+	$unipath = '$filename/asFile()/contents()/asXML()/cache($odt)';
+	echo "<h3>--- $unipath ---</h3>";
+	uni($unipath);
+	assert("\$GLOBALS['odt'] == \$_POST['test_xml']; /* ".json_encode($GLOBALS['odt'])." */");
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$unipath = 'cache($odt)/p';
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert('$result == array("Улица: Труда", "Общая площадь: 85 м² ", "Этажность: 12 ", "Этаж: 6 ", "Цена: <text:span text:style-name=\\"T1\\">5800000</text:span> руб. ", "", ""); /* '.print_r($result, true).' */');
+	//print_r($result);
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+	$unipath = 'cache($odt)/table/0/table-row/toArray()';
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$result = uni($unipath.'/assertEqu()', array('<table:table-cell office:value-type="string"><text:p text:style-name="P1">Район</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p text:style-name="P2">Центральный</text:p></table:table-cell>', 
+	'<table:table-cell office:value-type="string"><text:p
+text:style-name="P1">Улица</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p text:style-name="P2">Театральная 11</text:p></table:table-cell>', 
+'<table:table-cell office:value-type="string"><text:p text:style-name="P1">Класс</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p text:style-name="P2">премиум</text:p></table:table-cell>', 
+'<table:table-cell office:value-type="string"><text:p text:style-name="P1">Кол-во этажей</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p text:style-name="P2">9</text:p></table:table-cell>'));
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+	$unipath = 'cache($odt)/h/0/attrs()';
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$result = uni($unipath);
+	assert('$result == array("style-name"=>"Heading_20_1", "outline-level"=>"1"); /* '.print_r($result, true).' */');
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$unipath = 'cache($odt)/*';
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert('count($result) == 9; /* '.print_r($result, true).' */');
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$unipath = '/_POST/123/ArrayToXML()';
+	$_POST[123] = array('Data' => array('newbilding' => array(
+		'mainfnewb' => array('~/Media/Default/newbilding/mainf/SAM_1591-5.JPG',
+			'attrs()' => array('Width' => 200, "Height" => "150", "AlternateText" => "SAM_1591.JPG")),
+		'newbfotogal' => '/Media/Default/newbilding/gallery/SAM_1591-1.jpg'
+		)));
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert('$result == \'<Data><newbilding><mainfnewb Width="200" Height="150" AlternateText="SAM_1591.JPG">~/Media/Default/newbilding/mainf/SAM_1591-5.JPG</mainfnewb><newbfotogal>/Media/Default/newbilding/gallery/SAM_1591-1.jpg</newbfotogal></newbilding></Data>\'') or print_r($result);
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
 	
+	$unipath = '/_POST/123';
+	unset($_POST[123]);
+	echo "<h3>--- $unipath ---</h3>";
+	uni($unipath, 321);
+	assert('$_POST[123] == 321; /* '.json_encode($_POST).' */');
+	
+	$unipath = '/_POST/favorites/123';
+	unset($_POST['favorites']);
+	echo "<h3>--- $unipath ---</h3>";
+	uni($unipath, array('name' => 'test'));
+	assert('$_POST["favorites"][123] == array("name" => "test"); /* '.json_encode($_POST).' */');
+	
+	$unipath = '_POST/favorites/123';
+	unset($_POST['favorites']);
+	echo "<h3>--- $unipath ---</h3>";
+	uni($unipath, array('name' => 'test2'));
+	assert('$_POST["favorites"][123] == array("name" => "test2"); /* '.json_encode($_POST).' */');
+
+	$unipath = '_POST/favorites/333';
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert('is_null($result); /* '.json_encode($result).' */');	
+	
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$unipath = '_POST/favorites/ArrayToXML()';
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert('$result == "<name>test2</name>"; /* '.json_encode($result)." */");
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$unipath = '_POST/favorites/123/name/prepend(`name = `)';
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert('$result == "name = test2"; /* '.print_r($result, true)." */");
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
 }
