@@ -1,9 +1,9 @@
 <?php
 
-/*  UniPath - XPath like access to DataBase and Arrays
+/*  UniPath - XPath like access to DataBase, Files, XML, Arrays and any other data from PHP
  *  
- *  Version: 1.7.5dev
- *  Author: Saemon Zixel (saemon-zixel.moikrug.ru) on 2013-2014 year
+ *  Version: 1.7.7dev
+ *  Author: Saemon Zixel (saemon-zixel.moikrug.ru) on 2013-2015 year
  *  License: MIT
  *
  *	UniversalPath (uniPath.php) - универсальный доступ к любым ресурсам
@@ -11,7 +11,7 @@
  *  Позваляет читать и манипулировать, в том числе и менять, как локальные переменные внутри программы,
  *  так и в файлы на диске, таблицы в базе данных, удалённые ресурсы и даже менять на удалённом сервере 
  *  параметры запущенного приложения или считать запись access.log по определённой дате и подстроке UserAgent и т.д.
- *  Но всё это в светлом будущем. Сейчас реализованна только маленькая часть.
+ *  Но всё это в светлом будущем:) Сейчас реализованна только маленькая часть.
  *
  *  Copyright (c) 2013-2015 Saemon Zixel
  *
@@ -23,17 +23,24 @@
  *
  */
 
-global $uni_flush_cache, $uni_cache_data, $uni_cache_data_type, $uni_cache_data_tracking, $uni_cache_data_timestamp;
+global $uni_flush_cache, $uni_cache_data, $uni_cache_data_type, $uni_cache_data_tracking, $uni_cache_data_timestamp; // for PHP 5.3 and upper
 
-$uni_flush_cache = array(); // (private) накопившееся данные для записи в базу данных
+//$uni_flush_cache = array(); // (private) накопившееся данные для записи в базу данных
 
 $uni_cache_data = array();
 $uni_cache_data_type = array(); // типы закешированных данных
 $uni_cache_data_tracking = array(); // источники закешированных данных
 $uni_cache_data_timestamp = array(); // timestamp когда данные были закешированны
 
+// режим присвоения значения
+$__uni_assign_mode = false;
+
 function uni($xpath) {
- 
+
+	// мы в режиме присвоения заняения?
+	global $__uni_assign_mode;
+	$__uni_assign_mode = func_num_args() > 1;
+		
 	// разберём путь в дерево
 	$tree = __uni_parseUniPath($xpath);
 	
@@ -54,9 +61,14 @@ function uni($xpath) {
 
 			if(strncmp($track, 'file://', 7) == 0)
 				@file_put_contents($track, $set_value);
-				
-			elseif(sscanf($track, '%[^(]', $src_name) and function_exists("__unipath_{$src_name}_offsetSet"))
-				call_user_func("__unipath_{$src_name}_offsetSet", array($tree_node), 0, $set_value);
+
+			elseif(sscanf($track, '%[^(]', $src_name)) {
+				if(function_exists("_uni_{$src_name}_offsetSet"))
+					call_user_func("_uni_{$src_name}_offsetSet", array($tree_node), 0, $set_value);
+				else {
+if(!empty($GLOBALS['unipath_debug'])) error_log("_uni_{$src_name}_offsetSet() - no exist! *** ".$track);
+				}
+			}
 			
 		} else { 
 		
@@ -179,6 +191,20 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 							$tree[$lv]['data_tracking'][$new_key] = $tree[$lv-1]['data_tracking'][$key];
 					}
 				}
+			} elseif(is_array($tree[$lv-1]['data'])){
+				$tree[$lv]['data'] = array();
+				$tree[$lv]['data_type'] = 'array';
+				foreach($tree[$lv-1]['data'] as $num => $item) {
+					if(isset($tree[$lv-1]['data_tracking']) and isset($tree[$lv-1]['data_tracking'][$num]) and strncmp($tree[$lv-1]['data_tracking'][$num], '{"', 2) == 0) {
+						$metadata = json_decode(substr($tree[$lv-1]['data_tracking'][$num], 0, -1), true);
+						$key = $metadata['key()'];
+						
+						if(isset($tree[$lv]['data'][$key]))
+							$tree[$lv]['data'][$key][] = $item;
+						else
+							$tree[$lv]['data'][$key] = array($item);
+					}
+				}
 			};
 
 		// count()
@@ -240,6 +266,8 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 							case 'function':
 								if(substr_compare($filter[$expr]['left'], 'like(', 0, 5, true) == 0) {
 									$filter[$expr]['left_sql'] = preg_replace("~like\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 LIKE $2'$3'", $filter[$expr]['left']);
+								} elseif(substr_compare($filter[$expr]['left'], 'ilike(', 0, 6, true) == 0) {
+									$filter[$expr]['left_sql'] = preg_replace("~ilike\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 ILIKE $2'$3'", $filter[$expr]['left']);
 								} elseif(substr_compare($filter[$expr]['left'], 'like2(', 0, 5, true) == 0) {
 									$filter[$expr]['left_sql'] = iconv('UTF-8', 'WINDOWS-1251', preg_replace("~like2\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 LIKE $2'$3'", $filter[$expr]['left']));
 								} else
@@ -280,6 +308,8 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 							case 'function':
 								if(substr_compare($filter[$expr]['right'], 'like', 0, 4, true) == 0) {
 									$filter[$expr]['right_sql'] = preg_replace("~like2?\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 LIKE $2'$3'", $filter[$expr]['right']);
+								} elseif(substr_compare($filter[$expr]['right'], 'ilike(', 0, 6, true) == 0) {
+									$filter[$expr]['right_sql'] = preg_replace("~ilike\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 ILIKE $2'$3'", $filter[$expr]['right']);
 								} else/*if(substr_compare($filter[$expr]['right'], 'like2(', 0, 5, true) == 0) {
 									$filter[$expr]['right_sql'] = iconv('UTF-8', 'WINDOWS-1251', preg_replace("~like2\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 LIKE $2'$3'", $filter[$expr]['right']));
 								} else*/
@@ -322,7 +352,7 @@ if(!isset($filter[$expr]['right_sql'])) print_r($filter);
 					}
 					
 					// alias()
-					if(substr_compare($tree[$lv]["name$suffix"], 'alias(', 0, 6, true) === 0) {
+					if(strlen($tree[$lv]["name$suffix"]) >= 6 and substr_compare($tree[$lv]["name$suffix"], 'alias(', 0, 6, true) === 0) {
 						$tbl_name = rtrim(substr($tree[$lv]["name$suffix"], 6), "'\") ");
 						$commar_pos = strrpos($tbl_name, ',');
 						$alias_name = ltrim(substr($tbl_name, $commar_pos+1), "'\" ");
@@ -348,7 +378,7 @@ if(!isset($filter[$expr]['right_sql'])) print_r($filter);
 				$sql_limit = "";
 				$correct_lv = $lv;
 				for($i = $lv+1; $i < count($tree); $i++) {
-					if(substr_compare($tree[$i]['name'], 'order_by(', 0, 9, true) == 0) {
+					if(strlen($tree[$i]['name']) >= 9 and substr_compare($tree[$i]['name'], 'order_by(', 0, 9, true) == 0) {
 						$arg1 = trim(substr($tree[$i]['name'], 9, -1), ' ');
 						$char = empty($arg1) ? '' : $arg1[0];
 						$arg1 = in_array($char, array('"', "'")) 
@@ -357,7 +387,7 @@ if(!isset($filter[$expr]['right_sql'])) print_r($filter);
 						$sql_order_by = "ORDER BY $arg1";
 						$correct_lv++;
 					} else
-					if(substr_compare($tree[$i]['name'], 'columns(', 0, 8, true) == 0) {
+					if(strlen($tree[$i]['name']) >= 8 and substr_compare($tree[$i]['name'], 'columns(', 0, 8, true) == 0) {
 						$func_args = __uni_parseFunc($tree[$i]['name']);
 //var_dump($func_args, $tree[$i]['name']);
 						$sql_select = '';
@@ -382,15 +412,15 @@ if(!isset($filter[$expr]['right_sql'])) print_r($filter);
 						$sql_select = rtrim($sql_select, ', ');
 						$correct_lv++;
 					} else
-					if(substr_compare($tree[$i]['name'], 'limit(', 0, 6, true) == 0) {
+					if(strlen($tree[$i]['name']) >= 6 and substr_compare($tree[$i]['name'], 'limit(', 0, 6, true) == 0) {
 						$sql_limit = "LIMIT ".trim(substr($tree[$i]['name'], 6, -1), ' ');
 						$correct_lv++;
 					} else
-					if(substr_compare($tree[$i]['name'], 'asSQLQuery(', 0, 11, true) == 0) {
+					if(strlen($tree[$i]['name']) >= 11 and substr_compare($tree[$i]['name'], 'asSQLQuery(', 0, 11, true) == 0) {
 						$asSQLQuery = true;
 						$correct_lv++;
 					} else
-					if(substr_compare($tree[$i]['name'], 'sql_iconv(', 0, 10, true) == 0) {
+					if(strlen($tree[$i]['name']) >= 10 and substr_compare($tree[$i]['name'], 'sql_iconv(', 0, 10, true) == 0) {
 						$func_args = __uni_parseFunc($tree[$i]['name']);
 						if(isset($func_args['arg2'])) {
 							$iconv_from = $func_args['arg1'];
@@ -401,7 +431,7 @@ if(!isset($filter[$expr]['right_sql'])) print_r($filter);
 						}
 						$correct_lv++;
 					} else
-					if(substr_compare($tree[$i]['name'], 'top(', 0, 4, true) == 0) {
+					if(strlen($tree[$i]['name']) >= 4 and substr_compare($tree[$i]['name'], 'top(', 0, 4, true) == 0) {
 						$func_args = __uni_parseFunc($tree[$i]['name']);
 						$sql_select = "TOP {$func_args['arg1']} $sql_select";
 						$correct_lv++;
@@ -418,7 +448,7 @@ if(!isset($filter[$expr]['right_sql'])) print_r($filter);
 					$sql = iconv($iconv_from, $iconv_to, $sql);
 
 				// выполняем запрос или возвращаем
-//var_dump($sql, $sql_binds, isset($asSQLQuery));
+// // var_dump($sql, $sql_binds, isset($asSQLQuery));
 				if(isset($asSQLQuery)) {
 					$tree[$correct_lv]['data'] = array('query' => $sql, 'params' => $sql_binds);
 					$tree[$correct_lv]['data_type'] = "array/sql-query-with-params";
@@ -426,9 +456,9 @@ if(!isset($filter[$expr]['right_sql'])) print_r($filter);
 					$tree[$correct_lv]['data'] = array($db, $name);
 					$tree[$correct_lv]['data_type'] = 'array/db-table';
 				} elseif($prev_data_type == 'resource/odbc-link') {
-					$res = odbc_prepare($db, $sql);
-if(!$res) print_r(array(odbc_error($db), odbc_errormsg($db)));
-					odbc_execute($res, $sql_binds);
+					$res = odbc_prepare($db, $sql) or print_r(array(odbc_error($db), odbc_errormsg($db)));
+					odbc_setoption($res, 2, 0, 15); // time-out
+					odbc_execute($res, $sql_binds) or print_r(array(odbc_error($db), odbc_errormsg($db)));;
 				} else {
 					$res = $db->prepare($sql);
 if(!$res) print_r($db->errorInfo());
@@ -526,9 +556,20 @@ if(!$res) print_r($db->errorInfo());
 					}
 				}
 			};
-			
-		// [local-filesystem]
-		elseif($name == 'file://'):
+		
+		// url()
+		elseif(strncmp($name, 'url(', 4) == 0):
+			$func_and_args = __uni_parseFunc($name);
+			if($func_and_args['arg1_type'] == 'unipath')
+				$arg1 = uni($func_and_args['arg1']);
+			else
+				$arg1 = $func_and_args['arg1'];
+				
+			$tree[$lv]['data'] = $arg1;
+			$tree[$lv]['data_type'] = 'string/url';
+		
+		// fs() [local-filesystem]
+		elseif($name == 'file://' or $name == 'fs()'):
 			$tree[$lv]['data'] = null;
 			$tree[$lv]['data_type'] = 'local-filesystem';
 			$tree[$lv]['data_tracking'] = 'file://';
@@ -594,8 +635,13 @@ if(!$res) print_r($db->errorInfo());
 					$tree[$lv]['data_type'] = 'local_file';
 				else*/
 				if(is_file($path)) {
-					$tree[$lv]['data'] = file_get_contents($path);
-					$tree[$lv]['data_type'] = gettype($tree[$lv]['data']);
+					if(isset($tree[$lv+1]) and $tree[$lv+1]['name'] == 'asImageFile()') {
+						$tree[$lv]['data'] = $path;
+						$tree[$lv]['data_type'] = 'string/pathname';
+					} else {
+						$tree[$lv]['data'] = file_get_contents($path);
+						$tree[$lv]['data_type'] = gettype($tree[$lv]['data']);
+					}
 				} else
 				/*if(is_link($path) and isset($tree[$lv+1]) and $tree[$lv+1]['name'] != 'contents')
 					$tree[$lv]['data_type'] = 'local_symlink';
@@ -632,6 +678,61 @@ if(!$res) print_r($db->errorInfo());
 				$tree[$lv]['data_type'] = 'null';
 				//$tree[$lv]['data_tracking'] = "file_contents('".$tree[$lv-1]['data_tracking']."')";
 			};*/
+		
+		// contents()
+		elseif(($name == 'contents()' or $name == 'content()') and $prev_data_type == 'string/url'):
+		
+			$url_host = parse_url($tree[$lv-1]['data'], PHP_URL_HOST);
+			$url_host_port = parse_url($tree[$lv-1]['data'], PHP_URL_PORT) or $url_host_port = 80;
+			$url_path = parse_url($tree[$lv-1]['data'], PHP_URL_PATH);
+			$url_query = parse_url($tree[$lv-1]['data'], PHP_URL_QUERY);
+			empty($url_query) or $url_query = '?'.$url_query;
+			
+if(!empty($GLOBALS['unipath_debug'])) var_dump($url_host, $url_path.$url_query, $url_host_port);
+			$socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+			if($socket === false) {
+				error_log("socket_create() failed: reason: " . socket_strerror(socket_last_error()));
+			} else {
+
+				$result = socket_connect($socket, gethostbyname($url_host), $url_host_port);
+	
+				if($result === false) {
+					error_log("socket_connect() failed.\nReason: ($result) " . socket_strerror(socket_last_error($socket)));
+				} else {
+					$req = "GET {$url_path}{$url_query} HTTP/1.1\r\nHost: {$url_host}\r\nConnection: Close\r\n\r\n";
+					socket_write($socket, $req, strlen($req));
+	
+					$resp = array();
+					while($out = socket_read($socket, 2048))
+						$resp[] = $out;
+					
+					socket_close($socket);
+if(!empty($GLOBALS['unipath_debug'])) var_dump($resp);
+				}
+			}
+
+			// если есть ответ и в нём статус указан
+			if(isset($resp) and sscanf($resp[0], 'HTTP/1.%i %i', $http_ver, $http_status) == 2) {
+				switch($http_status) {
+					case 200:
+						$tree[$lv]['data'] = implode('', $resp);
+						$tree[$lv]['data_type'] = 'string/data';
+				
+						// отделим заголовок
+						$tree[$lv]['data'] = substr($tree[$lv]['data'], strpos($tree[$lv]['data'], "\r\n\r\n")+4);
+//var_dump($tree[$lv]['data']);
+						break;
+					case 404:
+					default:
+						break;
+				}
+			}
+			
+			// неудача
+			if(!isset($tree[$lv]['data'])) {
+				$tree[$lv]['data'] = null;
+				$tree[$lv]['data_type'] = 'null/data';
+			};
 		
 		// XMLtoArray()
 		elseif($name == 'XMLtoArray()'):
@@ -698,7 +799,7 @@ if(!$res) print_r($db->errorInfo());
 			};
 		
 		// add() [string]
-		elseif(strncmp($name, 'add(', 4) == 0 and is_string($tree[$lv-1]['data'])):
+		elseif(strncmp($name, 'add(', 4) == 0 and (is_string($tree[$lv-1]['data']) or is_numeric($tree[$lv-1]['data']))):
 			$func_and_args = __uni_parseFunc($name);
 			if($func_and_args['arg1_type'] == 'unipath')
 				$arg1 = uni($func_and_args['arg1']);
@@ -816,9 +917,12 @@ if(!$res) print_r($db->errorInfo());
 				$arg1 = uni($func_and_args['arg1']);
 			else
 				$arg1 = $func_and_args['arg1'];
-				
-			$tree[$lv]['data'] = explode($arg1, strval($tree[$lv-1]['data']));
+			
 			$tree[$lv]['data_type'] = 'array';
+			if(!is_array($tree[$lv-1]['data']))
+				$tree[$lv]['data'] = explode($arg1, strval($tree[$lv-1]['data']));
+			else
+				$tree[$lv]['data'] = array_map(create_function('$a','return explode(\''.$arg1.'\', $a);'), $tree[$lv-1]['data']);
 			if(array_key_exists('data_tracking', $tree[$lv-1])) {
 				$tree[$lv]['data_tracking'] = $tree[$lv-1]['data_tracking'];
 			};
@@ -841,9 +945,19 @@ if(!$res) print_r($db->errorInfo());
 
 		// first()
 		elseif(strncmp($name, 'first(', 6) == 0 and is_array($tree[$lv-1]['data'])):
-			$tree[$lv]['data_tracking'] = current(array_keys($tree[$lv-1]['data']));
-			$tree[$lv]['data'] = $tree[$lv-1]['data'][$tree[$lv]['data_tracking']];
-			$tree[$lv]['data_type'] = gettype($tree[$lv]['data']);
+			if(is_array($tree[$lv-1]['data']) and !empty($tree[$lv-1]['data'])) {
+				$tree[$lv]['data_tracking'] = current(array_keys($tree[$lv-1]['data']));
+				$tree[$lv]['data'] = $tree[$lv-1]['data'][$tree[$lv]['data_tracking']];
+				$tree[$lv]['data_type'] = gettype($tree[$lv]['data']);
+			} elseif(!is_array($tree[$lv-1]['data'])) {
+				$tree[$lv]['data'] = null;
+				$tree[$lv]['data_type'] = 'null';
+			} else {
+				$tree[$lv]['data'] =& $tree[$lv-1]['data'];
+				$tree[$lv]['data_type'] =& $tree[$lv-1]['data_type'];
+				if(isset($tree[$lv-1]['data_tracking'])) 
+				$tree[$lv]['data_tracking'] =& $tree[$lv-1]['data_tracking'];
+			}
 			
 		// key()
 		elseif(strncmp($name, 'key(', 4) == 0):
@@ -872,8 +986,9 @@ if(!$res) print_r($db->errorInfo());
 			unset($tree[$lv]['data'][$arg1]);
 			$tree[$lv]['data_type'] = $tree[$lv-1]['data_type'];
 		
-		// set()
-		elseif(strncmp($name, 'set(', 4) == 0 and is_array($tree[$lv-1]['data'])):
+		// set() or let()
+		elseif((strncmp($name, 'set(', 4) == 0 or strncmp($name, 'let(', 4) == 0) 
+			and is_array($tree[$lv-1]['data'])):
 			$tree[$lv]['data'] = $tree[$lv-1]['data'];
 			$tree[$lv]['data_type'] = $tree[$lv-1]['data_type'];
 			
@@ -885,6 +1000,7 @@ if(!$res) print_r($db->errorInfo());
 				
 				foreach($tree[$lv]['data'] as $key => $row)
 					$tree[$lv]['data'][$key][$arg1] = __uni_with_start_data($row, $arg2);
+				
 			} else {
 				$tree[$lv]['data'][$func_and_args['arg1']] = __uni_with_start_data($tree[$lv]['data'], $func_and_args['arg2']);
 			};
@@ -893,7 +1009,7 @@ if(!$res) print_r($db->errorInfo());
 		elseif(strncmp($name, 'asXML(', 6) == 0 and is_string($tree[$lv-1]['data'])):
 			$tree[$lv]['data'] =& $tree[$lv-1]['data'];
 			$tree[$lv]['data_type'] = 'string/xml';
-		
+			
 		// uni_lastTreeNode()
 		elseif($name == 'uni_lastTreeNode()'):
 			$tree[$lv]['data'] = $tree[$lv-1];
@@ -935,6 +1051,22 @@ if(!$res) print_r($db->errorInfo());
 							else
 								$left_result = isset($data[$filter[$expr]['left']]) ? $data[$filter[$expr]['left']] : null;
 							break;
+						case 'function':
+							if($filter[$expr]['left'] == 'key()') {
+								if(isset($tree[$lv-1]['data_tracking']) and is_array($tree[$lv-1]['data_tracking']) and isset($tree[$lv-1]['data_tracking'][$key])) {
+								$meta = json_decode(substr($tree[$lv-1]['data_tracking'][$key], 0, -1), true);
+								$left_result = $meta['key()'];
+								} else $left_result = $key;
+							} elseif(strncmp($filter[$expr]['left'], 'like(', 5) == 0) {
+								$func_and_args = __uni_parseFunc($filter[$expr]['left']);
+								if($func_and_args['arg1_type'] == 'unipath')
+									$left_result = __uni_with_start_data($data, $filter[$expr]['left']);
+								else
+									$left_result = $filter[$expr]['left'];
+//var_dump($left_result, trim($func_and_args['arg2'], '%'), strpos($left_result, trim($func_and_args['arg2'], '%')));
+								$left_result = strpos($left_result, trim($func_and_args['arg2'], '%')) !== false;
+							}
+							break;
 						case 'dot':
 							$left_result = $data;
 							break;
@@ -959,20 +1091,28 @@ if(!$res) print_r($db->errorInfo());
 								$right_result = null;
 							else
 								$right_result = isset($row[$filter[$expr]['right']]) ? $row[$filter[$expr]['right']] : null;
+						case 'list_of_strings':
+							$right_result = $filter[$expr]['right'];
+							$filter[$expr]['op'] = 'in_right';
+							break;
 						case 'string':
 						case 'number':
 						default:
 							$right_result = $filter[$expr]['right'];
 							break;
 					}
-						
+
 					// op
 					if(!isset($filter[$expr]['op']))
 						$filter[$expr]['result'] = $left_result;
 					else
 					switch($filter[$expr]['op']) {
 						case '=':
-							$filter[$expr]['result'] = $left_result == $right_result;
+// if(!isset($right_result)) var_dump($tree[$lv]['unipath']);
+							if(is_numeric($left_result) and is_numeric($right_result))
+								$filter[$expr]['result'] = $left_result == $right_result;
+							else
+								$filter[$expr]['result'] = $left_result === $right_result;
 							break;
 						case '<>':
 						case '!=':
@@ -1008,6 +1148,10 @@ if(!$res) print_r($db->errorInfo());
 							else
 								$filter[$expr]['result'] = false;
 							break;
+						case 'in_right':
+// var_dump($left_result, $right_result, $tree[$lv]['unipath']);
+							$filter[$expr]['result'] = in_array($left_result, $right_result);
+							break;
 						default:
 							$filter[$expr]['result'] = $left_result;
 					}
@@ -1016,7 +1160,7 @@ if(!$res) print_r($db->errorInfo());
 					$last_expr = $expr;
 					$expr = empty($filter[$expr]['next']) ? false : $filter[$expr]['next'];
 				}
-//print_r(array($key, $filter[$last_expr]['result'], $data));
+//var_dump(array($key, $filter[$last_expr]['result'], $data));
 				// если прошёл фильтр
 				if($filter[$last_expr]['result'])
 					$tree[$lv]['data'][$key] = $data;
@@ -1267,13 +1411,12 @@ function __uni_parseUniPath($xpath = '') {
 			
 			// названия поля/оси
 			// strpos('qwertyuiopasdfghjklzxcvbnm_*@0123456789.$', strtolower($xpath[$p]))
-			if(strpos("\\|/,+[](){}?!~`'\";№#%^&=- \n\t", $xpath[$p]) === false) {
+			if(strpos("\\|/,+[](){}?!~`'\";#%^&=- \n\t", $xpath[$p]) === false) {
 				$start_p = $p;
-				$len = strcspn($xpath, "\\|/,+[](){}?!~`'\";№#%^&=\t\n", $start_p);
-
+				$len = strcspn($xpath, "\\|/,+[](){}?!~`'\";#%^&=\t\n", $start_p);
 				$tree[count($tree)-1]['name'.$suffix] = substr($xpath, $start_p, $len);
 				$p += $len;
-				
+
 				// может это function() ?
 				if(isset($xpath[$p]) and $xpath[$p] == '(') {
 					$inner_brakets = 1; $inner_string = false;
@@ -1286,6 +1429,10 @@ function __uni_parseUniPath($xpath = '') {
 					}
 					$tree[count($tree)-1]['name'.$suffix] .= $xpath[$p++];
 				}
+				
+				// Кастыль: возможно это название файла со скобками
+				while(isset($xpath[$p]) and $xpath[$p] != '/' and $xpath[$p] != '[')
+					$tree[count($tree)-1]['name'.$suffix] .= $xpath[$p++];
 				
 				continue;
 			}
@@ -1615,26 +1762,36 @@ function __uni_parseUniPath($xpath = '') {
 					}
 					
 					// строка
-					if($xpath[$p] == "'") {
+					if($xpath[$p] == "'" or $xpath[$p] == '"' or $xpath[$p] == '`') {
 						$start_p = $p++;
-
-						while($p < strlen($xpath) and $xpath[$p] != "'") $p++;
-						$val = substr($xpath, $start_p+1, $p - $start_p-1);
-						$p++;
+						$p = strcspn($xpath, $xpath[$start_p], $p);
+						$val = substr($xpath, $start_p+1, $p);
+						$p = $start_p + $p + 2;
 
 						$filter[$expr][$expr_key] = $val;
 						$filter[$expr][$expr_key.'_type'] = 'string';
 						
 						// возможно это список строк
-						/*if($xpath[$p] == ',' or substr_compare($xpath, ' ,', $p, 2) === 0) {
+						$space = strspn($xpath, " \t\n", $p);
+						if($xpath[$p+$space] == ',') {
 							$filter[$expr][$expr_key.'_type'] = 'list_of_strings';
 							$filter[$expr][$expr_key] = array($filter[$expr][$expr_key]);
-							$p++;
-							
-							$len = strspn($xpath, '0123456789,', $p);
-							$filter[$expr][$expr_key] = array_merge($filter[$expr][$expr_key], explode(',', substr($xpath, $p, $len)));
-							$p += $len;
-						}*/
+							$p += $space+1;
+
+							$space = strspn($xpath, " \t\n", $p);
+							while(isset($xpath[$p+$space]) 
+								and strpos("\"'`", $xpath[$p+$space]) !== false) {
+								// начало, конец, строку в список, передвинем указатель
+								$start_p = $p + $space;
+								$p = strcspn($xpath, $xpath[$start_p], $start_p+1);
+								$filter[$expr][$expr_key][] = substr($xpath, $start_p+1, $p);
+								$p = $start_p + $p + 2;
+								
+								$space = strspn($xpath, " \t\n", $p);
+								if($xpath[$p+$space] != ',') break;
+								$space += strspn($xpath, " \t\n", $p+$space+1) + 1;
+							}
+						}
 						continue;
 					}
 					
@@ -1650,7 +1807,7 @@ function __uni_parseUniPath($xpath = '') {
 					if($xpath[$p] == '/') {
 						$start_p = $p;
 					
-						while(!in_array($xpath[$p], array(' ', ']', "\n")) and $p < strlen($xpath)) {
+						while(!in_array($xpath[$p], array(' ', ']', "\n", '=')) and $p < strlen($xpath)) {
 //echo "$p = $xpath[$p]\n";
 							$p++;
 						}
@@ -1693,7 +1850,8 @@ function __uni_parseUniPath($xpath = '') {
 function __uni_parseFunc($string) {
 
 	// временный кастыль для ifEmpty()
-	if(strncmp($string, 'ifEmpty(', 8) == 0 and strpos($string, '/') !== false)
+	if(strncmp($string, 'ifEmpty(', 8) == 0 and strpos($string, '/') !== false 
+	  and in_array($string[8], array("'", "`", "\"")) == false)
 		return array('func_name' => 'ifEmpty', 'arg1' => substr($string, 8, strlen($string)-9), 'arg1_type' => 'unipath');
 	
 	$result = array();
@@ -1876,10 +2034,12 @@ function _uni_assertEqu_offsetSet($tree, $lv = 0, $test) {
 		$test_name = trim($test_name, "'").' - ';
 	else
 		$test_name = '';
-	
+
 	if(!is_array($test))
-		return assert('$data == $test; /* '.$test_name.json_encode($data).' != '.json_encode($test).' */');
-		
+		return assert('$data == $test; /* '.$test_name.print_r($data, true).' != '.print_r($test, true).' */');
+
+	if(isset($test))
+		assert('isset($data);');
 	
 	$skip = array();
 	foreach($test as $test_key => $test_val) {
@@ -1900,7 +2060,7 @@ function _uni_assertEqu_offsetSet($tree, $lv = 0, $test) {
 		}
 		
 		if(is_null($found)) 
-			assert('in_array($test["'.$test_key.'"], $data); /* '.$test_name.'NOT FOUND - '.json_encode($test_val).' - IN - '.@json_encode($data).' */');
+			assert('in_array($test["'.$test_key.'"], $data); /* '.$test_name.'NOT FOUND $test["'.$test_key.'"] = '.print_r($test_val, true)."\n --- IN \$data --- \n".print_r($data, true).' */');
 		else
 			$skip[] = $found;
 	}
@@ -1977,14 +2137,29 @@ function _uni_decode_url($tree, $lv = 0) {
 }
 
 function _uni_formatPrice($tree, $lv = 0) {
+	assert('!is_array($tree[$lv-1]["data"])');
+
 	if(isset($tree[$lv-1]['data'])) {
 		$func_and_args = __uni_parseFunc($tree[$lv]['name']);
+
+		if(!isset($func_and_args['arg1']))
+			$arg1 = '';
+		elseif($func_and_args['arg1_type'] == 'unipath')
+			$arg1 = strval(uni($func_and_args['arg1']));
+		else
+			$arg1 = $func_and_args['arg1'];
+		
 		$price = floatval($tree[$lv-1]['data']);
-		$price_formated = number_format($price, 0, ',', ' ');
-		
-		if(!empty($func_and_args['arg1']))
-			$price_formated .= $func_and_args['arg1'];
-		
+
+		// если указали округлять до 50руб
+		if(isset($func_and_args['arg2']) and $func_and_args['arg2'] == '999>50') {
+			if($price > 999.999)
+				$price = ceil($price / 50) * 50;
+		}
+
+		// отформатируем число
+		$price_formated = number_format($price, 0, ',', ' ') . $arg1;
+
 		return array('data' => $price_formated, 'data_type' => 'null');
 	}
 	
@@ -1995,6 +2170,14 @@ function _uni_substr($tree, $lv = 0) {
 	if(isset($tree[$lv-1]['data'])) {
 		$func_and_args = __uni_parseFunc($tree[$lv]['name']);
 		return array('data' => substr($tree[$lv-1]['data'], $func_and_args['arg1']), 'data_type' => 'string');
+	}
+	
+	return array('data' => null, 'data_type' => 'null');
+}
+
+function _uni_array_flat($tree, $lv = 0) {
+	if(isset($tree[$lv-1]['data'])) {
+		return array('data' => call_user_func_array('array_merge', $tree[$lv-1]['data']), 'data_type' => 'array');
 	}
 	
 	return array('data' => null, 'data_type' => 'null');
@@ -2109,6 +2292,278 @@ function _uni_insert_into($tree, $lv = 0) {
 	return array('data' => null, 'data_type' => 'null');
 }
 
+function _uni_asImageFile($tree, $lv = 0) {
+
+		if(!in_array($tree[$lv-1]['data_type'], array('string/pathname')))
+			return array('data' => $tree[$lv-1]['data'], 'data_type' => $tree[$lv-1]['data_type']);
+		
+		// определим тип и загрузим фото
+		$img_info = getimagesize($tree[$lv-1]['data']);
+		switch($img_info[2]) {
+			case IMAGETYPE_JPEG: $im1 = imagecreatefromjpeg($tree[$lv-1]['data']); break;
+			case IMAGETYPE_GIF: 
+				$im1 = imagecreatefromgif($tree[$lv-1]['data']); 
+				break;
+			case IMAGETYPE_PNG: 
+				if(!isset($im1)) $im1 = imagecreatefrompng($tree[$lv-1]['data']); 
+				$im0 = imagecreatetruecolor($img_info[0], $img_info[1]);
+				imagealphablending($im0, false);
+				imagesavealpha($im0,true);
+				$transparent = imagecolorallocatealpha($im0, 255, 255, 255, 127);
+				imagefilledrectangle($im0, 0, 0, $img_info[0], $img_info[1], $transparent);
+				imagecopy($im0, $im1, 0, 0, 0, 0, $img_info[0], $img_info[1]);
+				imagedestroy($im1);
+				$im1 = $im0;
+				break;
+			default: $im1 = imagecreatefromstring(file_get_contents($tree[$lv-1]['data']));
+		}
+		return array('data' => $im1, 'data_type' => 'resource/gd', 'data_tracking' => $img_info);
+}
+
+function _uni_resize($tree, $lv = 0) {
+	$func_and_args = __uni_parseFunc($tree[$lv]['name']);
+	
+	if(!isset($func_and_args['arg1']))
+		$new_width = '';
+	elseif($func_and_args['arg1_type'] == 'unipath')
+		$new_width = uni($func_and_args['arg1']);
+	else
+		$new_width = $func_and_args['arg1'];
+		
+	if(!isset($func_and_args['arg2']))
+		$new_height = '';
+	elseif($func_and_args['arg2_type'] == 'unipath')
+		$new_height = uni($func_and_args['arg2']);
+	else
+		$new_height = $func_and_args['arg2'];
+		
+	if(!isset($func_and_args['arg3']))
+		$resize_mode = '';
+	elseif($func_and_args['arg3_type'] == 'unipath')
+		$resize_mode = uni($func_and_args['arg3']);
+	else
+		$resize_mode = $func_and_args['arg3'];
+	
+	assert('is_resource($tree[$lv-1]["data"])');
+	assert('isset($tree[$lv-1]["data_tracking"])') or print_r($tree);
+	
+	// расчитываем новые размеры в соответствии с указанным режимом
+	$height = 0; 
+	$width = 0;
+	$img_info = $tree[$lv-1]['data_tracking'];
+	switch($resize_mode) {
+		default:
+		case "": // only larger
+			if($img_info[0] < $new_width and $img_info[1] < $new_height) {
+				$width = intval($img_info[0]);
+				$height = intval($img_info[1]);
+			} else {
+				if($new_width) {
+					$width = $new_width;
+					$height = $img_info[1] / ($img_info[0] / $new_width);
+				}
+				if($new_height and $height > $new_height) {
+					$height = $new_height;
+					$width = $img_info[0] / ($img_info[1] / $new_height);
+				}
+			}
+			break;
+		case "inbox":
+			if($new_width) {
+				$width = $new_width;
+				$height = $img_info[1] / ($img_info[0] / $new_width);
+			}
+			if($new_height and $height > $new_height) {
+				$height = $new_height;
+				$width = $img_info[0] / ($img_info[1] / $new_height);
+			}
+			break;
+		case "fill":
+			if($new_width) {
+				$width = $new_width;
+				$height = $img_info[1] / ($img_info[0] / $new_width);
+			}
+			if($new_height and $height < $new_height) {
+				$height = $new_height;
+				$width = $img_info[0] / ($img_info[1] / $new_height);
+			}
+			break;
+	}
+if(!empty($GLOBALS['unipath_debug'])) var_dump($resize_mode, $width, $height);
+
+	// уменьшаем/увеличиваем
+	$im2 = imagecreatetruecolor($width, $height);
+	imagecopyresampled($im2, $tree[$lv-1]['data'], 0, 0, 0, 0, $width, $height, $img_info[0], $img_info[1]);
+	imagedestroy($tree[$lv-1]['data']);
+	
+	return array(
+		'data' => $im2, 
+		'data_type' => $tree[$lv-1]['data_type'], 
+		'data_tracking' => array($width, $height, 3=> "height=\"{$height}\" width=\"{$width}\"") + $tree[$lv-1]['data_tracking']);
+}
+
+function _uni_crop($tree, $lv = 0) {
+	$func_and_args = __uni_parseFunc($tree[$lv]['name']);
+	
+	if(!isset($func_and_args['arg1']))
+		$new_width = '';
+	elseif($func_and_args['arg1_type'] == 'unipath')
+		$new_width = uni($func_and_args['arg1']);
+	else
+		$new_width = $func_and_args['arg1'];
+		
+	if(!isset($func_and_args['arg2']))
+		$new_height = '';
+	elseif($func_and_args['arg2_type'] == 'unipath')
+		$new_height = uni($func_and_args['arg2']);
+	else
+		$new_height = $func_and_args['arg2'];
+		
+	if(!isset($func_and_args['arg3']))
+		$gravity = 'auto';
+	elseif($func_and_args['arg3_type'] == 'unipath')
+		$gravity = uni($func_and_args['arg3']);
+	else
+		$gravity = $func_and_args['arg3'];
+		
+	// теперь вырежем центральную область
+	$src_x = $src_y = 0;
+//	if(in_array($gravity, array("", 'auto', 'center'))) {
+		$src_x = round(($tree[$lv-1]['data_tracking'][0] - $new_width) / 2);
+		$src_y = round(($tree[$lv-1]['data_tracking'][1] - $new_height) / 2);
+
+		$im2 = imagecreatetruecolor($new_width, $new_height);
+		imagecopy($im2, $tree[$lv-1]['data'], 0, 0, $src_x, $src_y, $tree[$lv-1]['data_tracking'][0], $tree[$lv-1]['data_tracking'][1]);
+		imagedestroy($tree[$lv-1]['data']);
+//	}
+	
+	return array(
+		'data' => $im2, 
+		'data_type' => $tree[$lv-1]['data_type'], 
+		'data_tracking' => array($new_width, $new_height, 3=> "height=\"{$new_height}\" width=\"{$new_width}\"") + $tree[$lv-1]['data_tracking']);
+}
+
+function _uni_watermark($tree, $lv = 0) {
+	$func_and_args = __uni_parseFunc($tree[$lv]['name']);
+	
+	if(!isset($func_and_args['arg1']))
+		return array('data' => $tree[$lv-1]['data'], 'data_type' => $tree[$lv-1]['data_type'], 'data_tracking' => $tree[$lv-1]['data_tracking']);
+	elseif($func_and_args['arg1_type'] == 'unipath')
+		$wm_file = uni($func_and_args['arg1']);
+	else
+		$wm_file = $func_and_args['arg1'];
+	
+	// определим тип и загрузим фото
+	if(is_resource($wm_file)) {
+		$wm_info = array(imagesx($wm_file), imagesy($wm_file));
+		$wm = $wm_file;
+	} else {
+		$wm_info = getimagesize($wm_file);
+		switch($wm_info[2]) {
+			case IMAGETYPE_JPEG: $wm = imagecreatefromjpeg($wm_file); break;
+			case IMAGETYPE_GIF: $wm = imagecreatefromgif($wm_file); break;
+			case IMAGETYPE_PNG: $wm = imagecreatefrompng($wm_file); break;
+			default: $wm = imagecreatefromstring(file_get_contents($wm_file));
+		}
+	}
+
+	// уменьшим пропорционально водяной знак если он больше фото
+	$dest_width = $wm_info[0];
+	$dest_height = $wm_info[1];
+	if($tree[$lv-1]['data_tracking'][0] < $wm_info[0]) {
+		$dest_width = $tree[$lv-1]['data_tracking'][0];
+		$dest_height = $wm_info[1] / ($wm_info[0] / $dest_width);
+	}
+	if($tree[$lv-1]['data_tracking'][1] < $dest_height) {
+		$dest_height = $tree[$lv-1]['data_tracking'][1];
+		$dest_width = $wm_info[0] / ($wm_info[1] / $dest_height);
+	}
+	
+	// вычеслим центр
+	$dest_x = ($tree[$lv-1]['data_tracking'][0] - $dest_width) / 2;
+	$dest_y = ($tree[$lv-1]['data_tracking'][1] - $dest_height) / 2;
+	
+	imagealphablending($tree[$lv-1]['data'], true);
+	imagealphablending($wm, true);
+		
+	imagecopyresampled(
+		$tree[$lv-1]['data'], $wm, 
+		$dest_x, $dest_y, 0, 0, 
+		$dest_width, $dest_height, $wm_info[0], $wm_info[1]);
+
+//header('Content-Type: image/jpeg'); imagejpeg($tree[$lv-1]['data']);
+
+	return array('data' => $tree[$lv-1]['data'], 'data_type' => 'resource/gd', 'data_tracking' => $tree[$lv-1]['data_tracking']);
+}
+
+function _uni_saveAs($tree, $lv = 0) {
+	$func_and_args = __uni_parseFunc($tree[$lv]['name']);
+	
+	if(!isset($func_and_args['arg1']))
+		$filepath = '';
+	elseif($func_and_args['arg1_type'] == 'unipath')
+		$filepath = uni($func_and_args['arg1']);
+	else
+		$filepath = $func_and_args['arg1'];
+	
+	$quality = 83;
+	
+	switch($tree[$lv-1]['data_type']) {
+		case 'resource/gd':
+			$file_ext = substr($filepath, -4);
+			if(stripos($file_ext, 'gif') !== false)
+				imagegif($tree[$lv-1]['data'], $filepath);
+			elseif(stripos($file_ext, 'png') !== false)
+				imagepng($tree[$lv-1]['data'], $filepath, round($quality/10));
+			else 
+				imagejpeg($tree[$lv-1]['data'], $filepath, $quality);
+			break;
+		default:
+			file_put_contents($filepath, $tree[$lv-1]['data']);
+			break;
+	}
+	
+	return array('data' => $tree[$lv-1]['data'], 'data_type' => $tree[$lv-1]['data_type'], 'data_tracking' => $tree[$lv-1]['data_tracking']);
+}
+
+function _uni_basename($tree, $lv = 0) {
+	if(isset($tree[$lv-1]['data']) and is_string($tree[$lv-1]['data'])) {
+		return array(
+			'data' => substr($tree[$lv-1]['data'], max(strrpos($tree[$lv-1]['data'], '/'), -1) + 1), 
+			'data_type' => 'string');
+	}
+	
+	if(isset($tree[$lv-1]['data']) and is_array($tree[$lv-1]['data'])) {
+		$result = array();
+		foreach($tree[$lv-1]['data'] as $filename)
+		if(is_string($filename))
+			$result = substr($filename, max(strrpos($filename, '/'), -1) + 1);
+			
+		return array(
+			'data' => $result, 
+			'data_type' => 'array');
+	}
+	
+	return array('data' => null, 'data_type' => 'null');
+}
+
+function _uni_plus_procents($tree, $lv = 0) {
+	if(is_numeric($tree[$lv-1]['data'])) {
+		$func_and_args = __uni_parseFunc($tree[$lv]['name']);
+	
+		if(!isset($func_and_args['arg1']))
+			$arg1 = 0;
+		elseif($func_and_args['arg1_type'] == 'unipath')
+			$arg1 = floatval(uni($func_and_args['arg1']));
+		else
+			$arg1 = floatval($func_and_args['arg1']);
+			
+		return array('data' => floatval($tree[$lv-1]['data']) + floatval($tree[$lv-1]['data']) * $arg1 / 100, 'data_type' => 'number');
+	}
+	
+	return array('data' => null, 'data_type' => 'null');
+}
+
 function _uni_xml($tree, $lv = 0) {
 	
 	$call = array('find_node', 'xml_as_string' => $tree[$lv-1]['data'], 'tag_name' => $tree[$lv]['name'], 'result_data' => array(), 'result_data_type' => array(), 'result_data_tracking' => array());
@@ -2169,7 +2624,8 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump($block);
 			case 'next_tag_close_found':
 				$nodeName_len = strcspn($block, " />\t\n", $call['tag_start']);
 				$ns_len = strcspn($block, ':', $call['tag_start'], $nodeName_len);
-//var_dump(substr($block, $call['tag_start']+($ns_len < $nodeName_len ? $ns_len+1 : 1)), $block[$call['tag_start']+$nodeName_len]);
+				if($ns_len == $nodeName_len) $ns_len = 0;
+//var_dump("nodeName_len = $nodeName_len, ns_len = $ns_len", substr($block, $call['tag_start']+ $ns_len+1, $nodeName_len - $ns_len - 1), $block[$call['tag_start']+$nodeName_len]);
 
 				// если наш тег, то добавляем его в результат
 				if($call['tag_name'] == '*' or 
@@ -2178,11 +2634,11 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump($block);
 					$tag_start = $call['tag_start'];
 					$tag2_end = $call['called']['tag2_end'];
 					$tag2_start = $call['called']['tag2_start'];
-					
+
 					$call['result_data'][] = $tag2_end == $call['tag_end'] ? '' : substr($block, $call['tag_end']+1, $tag2_start-$call['tag_end']-1);
 					$call['result_data_type'][] = 'string/xml-fragment';
 					$call['result_data_tracking'][] = json_encode(array('string' => 'xml-fragment',
-						"key()" => substr($block, $call['tag_start']+($ns_len < $nodeName_len ? $ns_len+1 : 1), $nodeName_len - $ns_len - 1), //$call['tag_name'],
+						"key()" => substr($block, $call['tag_start']+$ns_len+1, $nodeName_len - $ns_len - 1), //$call['tag_name'],
 						"pos()" => count($call['result_data_tracking']),
 						"tag" => substr($block, $call['tag_start'], $tag_end - $tag_start+1),
 						"start_offset" => $tag_start, 

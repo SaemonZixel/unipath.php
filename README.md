@@ -67,7 +67,53 @@ Array
 	// array('aaa' => 111, 'bbb' => 222, 'ccc' => 333);
 	
 	uni("array1/.[. > 200]")
-	// array('bbb' => 222, 'ccc' => 333)
+	// array('bbb' => 222, 'ccc' => 333);
 	
 	uni("array1/.[. > 200 and . < 300]")
-	// array('bbb' => 222)
+	// array('bbb' => 222);
+	
+XML
+---
+
+	$xml = '<rows>
+		<row id="1"><cell index="1">1a</cell><cell index="2">2a</cell></row>
+		<row id="2"><cell index="1">1b</cell><cell index="2">2b</cell></row>
+	</rows>';
+	uni("xml/asXML()/rows/0/row/1/cell/0")
+	// '1b'
+	
+	uni("xml/asXML()/rows/0/row/1/cell")
+	// array('1b', '2b');
+	
+	uni("xml/asXML()/rows/0/row/1")
+	// '<cell index="1">1b</cell><cell index="2">2b</cell>'
+	
+	uni("xml/asXML()/rows/0/row")
+	// array(
+	//   '<cell index="1">1a</cell><cell index="2">2a</cell>',
+	//   '<cell index="1">1b</cell><cell index="2">2b</cell>'
+	// );
+	
+	$array1 = array('items' => array('aaa' => 111, 'bbb' => 222, 'ccc' => 333));
+	uni('array1/ArrayToXML()')
+	// '<items><aaa>111</aaa><bbb>222</bbb><ccc>333</ccc></items>'
+	
+Files
+-----
+
+	uni("fs()/etc/passwd/contents()")
+	// ... contents of the file 'passwd' ...
+	
+	$filename = '/etc/passwd';
+	uni("filename/asFile()/contents()")
+	// ... contents of the file 'passwd' ...
+	
+	$dirname = '/etc';
+	uni("dirname/asDirectory()/passwd/contents()")
+	// ... contents of the file 'passwd' ...
+	
+Image
+-----
+
+	uni("fs()/images/image1.jpg/asImageFile()/resize(400, 500, 'fill')/crop(400, 500)/saveAs('/images/image1b.png')")
+	// (save resized and croped image as '/images/image1b.png')
