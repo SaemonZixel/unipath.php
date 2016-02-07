@@ -450,6 +450,46 @@ if(isset($_GET['test_parseUniPath'])) {
 			'unipath' => "db1/orders[u_id = /_SESSION/user/u_id and ord_deleted = 0]"
 		));
 		
+	$unipath = "/db1/table1[id = -123]";
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true;
+	$tree = __uni_parseUniPath($unipath);
+	_uni_assertEqu_offsetSet(
+		array(array('name' => 'parse_negative_number', 'data' => $tree[1])), 
+		0, 
+		array('name' => 'table1',
+			'filter' => array('start_expr' => 'expr1',
+				'expr1' => array(
+					'left' => 'id',
+					'left_type' => 'name',
+					'op' => '=',
+					'right' => -123,
+					'right_type' => 'number',
+				))));
+	
+	$unipath = "/db1/table1[]";
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true;
+	$tree = __uni_parseUniPath($unipath);
+	_uni_assertEqu_offsetSet(
+		array(array('name' => 'parse_empty_filter', 'data' => $tree[1])), 
+		0, 
+		array('name' => 'table1',
+			'filter' => array('start_expr' => 'expr1', 'expr1' => array())));
+
+	$unipath = "/db1/table1[1]";
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true;
+	$tree = __uni_parseUniPath($unipath);
+// print_r($tree);
+	_uni_assertEqu_offsetSet(
+		array(array('name' => 'parse_empty_filter', 'data' => $tree[1])), 
+		0, 
+		array('name' => 'table1',
+			'filter' => array('start_expr' => 'expr1', 
+				'expr1' => array('left' => '1', 'left_type' => 'number')
+			)));
+			
 	$unipath = "/.[1=1 and (DataXML/zemucharea = 'Лазаревский' or DataXML/zemucharea = 'Хостинский') and DataXML/priceuch <= 0]";
 	echo "<h3>--- $unipath ---</h3>";
 	$tree = __uni_parseUniPath($unipath);
@@ -572,6 +612,32 @@ if(isset($_GET['test_parseUniPath'])) {
 	);
 // print_r($tree);
 
+	$unipath = "/row/prd_data_json_encoded/asJSON()/.[./key()/preg_match('image[0-9]$')]";
+echo "<h3>--- $unipath ---</h3>";
+	$tree = __uni_parseUniPath($unipath);
+	assert("\$tree[3] == array('name' => '.', 'unipath' => '/row/prd_data_json_encoded/asJSON()/.[./key()/preg_match(\'image[0-9]$\')]', 'filter' => array('start_expr' => 'expr1', 'expr1' => array('left' => './key()/preg_match(\'image[0-9]$\')', 'left_type' => 'unipath'))); /* ".print_r($tree[3], true).' */');
+// print_r($tree);
+
+	$fs_filename = mb_convert_encoding('123лаущыцлвв-1.jpg', 'WINDOWS-1251', 'UTF-8');
+	$unipath = "_SERVER/DOCUMENT_ROOT/asDirectory()/objs/123/Pictures/$fs_filename/asImageFile()/resize(`100`, `100`, `inbox`)/saveAs(`/tmp/$fs_filename`)";
+	echo "<h3>--- $unipath ---</h3>";
+	$tree = __uni_parseUniPath($unipath);
+	assert("\$tree[10] == array('name' => 'saveAs(`/tmp/$fs_filename`)', 'unipath' => '_SERVER/DOCUMENT_ROOT/asDirectory()/objs/123/Pictures/$fs_filename/asImageFile()/resize(`100`, `100`, `inbox`)/saveAs(`/tmp/$fs_filename`)')");
+// print_r($tree);
+
+	$fs_filename = "2,_3,_4этаж[1]-1.JPG";
+	$unipath = "_SERVER/DOCUMENT_ROOT/asDirectory()/objs/123/Pictures/'$fs_filename'/asImageFile()/resize(`100`, `100`, `fill`)/crop(`100`, `100`)/saveAs(`/tmp/$fs_filename`)";
+	echo "<h3>--- $unipath ---</h3>";
+	$tree = __uni_parseUniPath($unipath);
+	assert("\$tree[7] == array('name' => '$fs_filename', 'unipath' => '_SERVER/DOCUMENT_ROOT/asDirectory()/objs/123/Pictures/\'$fs_filename\''); /* ".print_r($tree[7], true).' */');
+// print_r($tree);
+
+	$func_string = $tree[10]['name'];
+	echo "<h3>--- $func_string ---</h3>";
+	$result = __uni_parseFunc($func_string);
+	assert("\$result = array('func_name' => 'saveAs', 'arg1' => '/tmp/$fs_filename', 'arg1_type' => 'string')");
+// print_r($result);
+	
 	$func_string = "add(row_data/newbadress/regexp_replace('^[0-9]+\.',''))";
 	echo "<h3>--- $func_string ---</h3>";
 	$result = __uni_parseFunc($func_string);
@@ -695,6 +761,7 @@ if(isset($_GET['test_uniPath'])) {
 //$GLOBALS['unipath_debug'] = false;
 
 //$GLOBALS['unipath_debug'] = true;
+	if(!file_exists('unipath_test.txt')) file_put_contents('unipath_test.txt', '123');
 	$unipath = 'file://./unipath_test.txt';
 	echo "<h3>--- $unipath ---</h3>";
 	uni($unipath, '123');
@@ -742,9 +809,9 @@ if(isset($_GET['test_uniPath'])) {
 
 	$unipath = '/$_POST/empty_value/ifEmpty(\'<span class="obj-nophoto">Нет фото</span>\')';
 	echo "<h3>--- $unipath ---</h3>";
-$GLOBALS['unipath_debug'] = true; echo '<xmp>';
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
 	uni($unipath.'/assertEqu()', '<span class="obj-nophoto">Нет фото</span>');
-$GLOBALS['unipath_debug'] = false; echo '</xmp>';
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
 
 	
 	$unipath = '$_POST/abc/formatPrice(\' руб.\')';
@@ -789,8 +856,33 @@ $GLOBALS['unipath_debug'] = false; echo '</xmp>';
 		+table3
 		+table4[tbl1.id=table4.id]/order_by('tbl1.id')/columns('tbl1.*, tbl1.id as id1, tbl2.*, IFNULL(tbl1.name, ''(null)'') as name')/asSQLQuery()";
 	echo "<h3>--- $unipath ---</h3>";
-//$GLOBALS['unipath_debug'] = true;
+// $GLOBALS['unipath_debug'] = true;
 	uni($unipath.'/assertEqu()', array('query' => 'SELECT tbl1.*, tbl1.id as id1, tbl2.*, IFNULL(tbl1.name, \'(null)\') as name FROM table1 AS tbl1 LEFT JOIN table2 AS tbl2 ON tbl1.id = tbl2.id NATURAL JOIN table3 LEFT JOIN table4 ON tbl1.id = table4.id WHERE id = 1 ORDER BY tbl1.id', 'params' => array()));
+// $GLOBALS['unipath_debug'] = false;
+	
+	$unipath = "db1/table1[id = -123]/asSQLQuery()";
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true;
+	$sql = uni($unipath);
+	assert('$sql = "SELECT * FROM table1 WHERE id = -123"; /* '.print_r($sql, true).' */');
+	
+	$unipath = "db1/table1[1]/asSQLQuery()";
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true;
+	$sql = uni($unipath);
+	assert('$sql = "SELECT * FROM table1 WHERE 1"; /* '.print_r($sql, true).' */');
+
+	$unipath = "db1/table1[]/asSQLQuery()";
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true;
+	$sql = uni($unipath);
+	assert('$sql = "SELECT * FROM table1"; /* '.print_r($sql, true).' */');
+	
+	$unipath = "db1/table1[like(val, '%123%')]/asSQLQuery()";
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true;
+	$sql = uni($unipath);
+	assert('$sql = "SELECT * FROM table1 WHERE val LIKE \'%123%\'"; /* '.print_r($sql, true).' */');
 	
 	$_GET['test_list'] = '~/Media/Default/newbilding/gallery/фото-1.jpg; ~/Media/Default/newbilding/gallery/фото-2.jpg; ;~/Media/Default/newbilding/gallery/фото-3.jpg ';
 	$unipath = "\$_GET/test_list/split(';')/trim()/remove_empty()/regexp_replace('^~(\/.*)$', '<span class=\"obj_page-photo-wrp\"><img class=\"obj_page-photo-img\" src=\"$1\" alt=\"\" /></span>')/join(' ')";
@@ -804,6 +896,14 @@ $GLOBALS['unipath_debug'] = false; echo '</xmp>';
 // $GLOBALS['unipath_debug'] = true;
 	$result = uni($unipath);
 	assert('$result["test_list"] == array("~/Media/Default/newbilding/gallery/фото-1.jpg"," ~/Media/Default/newbilding/gallery/фото-2.jpg"," ","~/Media/Default/newbilding/gallery/фото-3.jpg "); /* '.print_r($result['test_list'], true).' */');
+// $GLOBALS['unipath_debug'] = false;
+
+	$GLOBALS['row_data'] = ';;открытый поселок;';
+	$unipath = '/row_data/houseref/split(`;`)/remove_empty()';
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+	assert('$result == array("открытый поселок"); /* '.print_r($result, true).' */');
 // $GLOBALS['unipath_debug'] = false;
 	
 	$unipath = "db1/table1[id=1]/columns(chunked(table1.Data, 10000, 3000), 'table1.Id AS id1, table1.ContentType_id, REPLACE(''abcd)asd'', '')'', ''('')')/asSQLQuery()";
@@ -922,6 +1022,17 @@ echo '</xmp>';
 	assert('$result == "<a>123</a>"; /* '.print_r($result, true).' */');
 //echo '</xmp>';
 //unset($GLOBALS['unipath_debug']);
+
+	$_POST[0] = array('u_id' => 6842,'u_data_json_encoded' => '{"FileExtension":"png","Avatar":"\/Media\/Default\/Avatars\/6842.png"}');
+//$GLOBALS['unipath_debug'] = true;
+	$unipath = "/_POST/0/let(main_photo, u_data_json_encoded/asJSON()/Avatar)/main_photo";
+	echo "<h3>--- $unipath ---</h3>";
+//echo '<xmp>';
+	$result = uni($unipath);
+// print_r($result);
+	assert('$result == "/Media/Default/Avatars/6842.png"; /* '.print_r($result, true).' */');
+//echo '</xmp>';
+//unset($GLOBALS['unipath_debug']
 
 	$_POST['test_xml'] = '<?xml version="1.0" encoding="UTF-8"?><html>
 		<head><title>test_xml</title></head>
@@ -1098,6 +1209,15 @@ echo '</xmp>';
 	assert('$result == "name = test2"; /* '.print_r($result, true)." */");
 // $GLOBALS['unipath_debug'] = false; echo '</xmp>';
 
+	$_POST['favorites'] = array('6.jpg', '87.jpg');
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$unipath = '_POST/favorites/regexp_replace(`.+`, `<img class="c-image_viewer-preload-image c-image_viewer-switcher" data-src="/images/940x350/$0" alt="">`)/join()';
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert('$result == \'<img class="c-image_viewer-preload-image c-image_viewer-switcher" data-src="/images/940x350/6.jpg" alt=""><img class="c-image_viewer-preload-image c-image_viewer-switcher" data-src="/images/940x350/87.jpg" alt="">\'; /* '.print_r($result, true)." */");
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+
 // $GLOBALS['unipath_debug'] = true; echo '<xmp>';
 	$unipath = "url(`http://{$_SERVER['HTTP_HOST']}/unipath_test.php?echo=abc123`)";
 	echo "<h3>--- $unipath ---</h3>";
@@ -1111,4 +1231,45 @@ echo '</xmp>';
 	$result = uni($unipath);
 	assert("\$result == 'abc123'; /* ".print_r($result, true)." */ ");
 // $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$GLOBALS['url1'] = '/nedvizhimost/prodazha/1-komnatnie_kvartiry';
+	$unipath = "/url1/url_seg(3)";
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert("\$result == '1-komnatnie_kvartiry'; /* ".print_r($result, true)." */ ");
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$GLOBALS['row'] = array('prd_id' => 1, 'prd_data_json_encoded' => '{"content_image":"","image0":"123.jpg","image0_alt":"xxx","image5_alt":"555","image":"imageX","image999":"image999.png"}');
+	$unipath = "/row/prd_data_json_encoded/asJSON()/.[./key()/regexp_match('image[0-9]+$')]";
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert("\$result == array('image0' => '123.jpg', 'image999' => 'image999.png'); /* ".print_r($result, true)." */ ");
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+	
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$GLOBALS['row'] = array('prd_id' => 1, 'prd_data_json_encoded' => '{"content_image":"","image0":"123.jpg","image0_alt":"xxx","image5_alt":"555","image":"imageX","image999":"image999.png"}');
+	$unipath = "/row/prd_data_json_encoded/asJSON()/.[key()/regexp_match(`image[0-9]+$`)]";
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert("\$result == array('image0' => '123.jpg', 'image999' => 'image999.png'); /* ".print_r($result, true)." */ ");
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
+	$GLOBALS['row'] = array('prd_id' => 1, 'prd_data_json_encoded' => '{"content_image":"","image0":"123.jpg","image0_alt":"xxx","image5_alt":"555","image":"imageX","image999":"image999.png"}');
+	$unipath = "/row/prd_data_json_encoded/asJSON()/.[key()/regexp_match(`image[0-9]+$`)]/regexp_replace(`.+`, `<b>$0</b>`)";
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert("\$result == array('image0' => '<b>123.jpg</b>', 'image999' => '<b>image999.png</b>'); /* ".print_r($result, true)." */ ");
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
+
+/*	$xml = '<rows>
+		<row id="1"><cell index="1">1a</cell><cell index="2">2a</cell></row>
+		<row id="2"><cell index="1">1b</cell><cell index="2">2b</cell></row>
+	</rows>';
+	var_dump(uni("xml/asXML()")); */
+	
+	$array1 = array('xml' => array('aaa' => 111, 'bbb' => 222, 'ccc' => 333));
+	var_dump(uni('array1/ArrayToXML()'));
 }

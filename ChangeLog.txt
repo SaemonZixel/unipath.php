@@ -1,0 +1,36 @@
+2016-02-07  Saemon Zixel  <saemonzixel@gmail.com>
+
+	* version 1.7.8dev
+    * SQL: empty filter or with half expression
+    * set(./, ./), toURLTranslit(), url_seg()
+    * strings in unipath segments with delimiters: ', ", `, ```.
+    * bugfixes and new tests
+
+2015-07-05 Saemon Zixel  <saemonzixel@gmail.com>
+
+	* version 1.7.7dev
+	* SQL: ilike()
+	* Image: asImageFile(), resize(), crop(), watermark(), saveAs()
+	* fs(), basename(), url(), url()/contents() use sockets, split()+arrays, array_flat(), plus_procents()
+	* secondary filtering can use key() in filter and list of string on right hand expression
+	* many bugfixes and new bugs...
+    
+2015-04-10 Saemon Zixel  <saemonzixel@gmail.com>
+
+	* assign repaired, but little functional.
+    * asXML(), ArrayToXML(), decode_url()
+    * many bugfixes and new bugs
+    
+2015-02-16 Saemon Zixel  <saemonzixel@gmail.com>
+	
+	* unipath.php: many changes...
+	* unipath_tests.php: tests for parsing and evaluting
+    
+2015-01-22 Saemon Zixel  <saemonzixel@gmail.com>
+	
+	* RADME.md: DataBase and Array examples
+    
+2014-11-11 Saemon Zixel  <saemonzixel@gmail.com>
+	
+	* version 1.4-alpha
+	* unipath.php: base functional
