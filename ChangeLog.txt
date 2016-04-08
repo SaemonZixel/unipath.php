@@ -1,3 +1,21 @@
+2016-04-08  Saemon Zixel  <saemonzixel@gmail.com>
+
+	* version 2.0-dev
+	* cursor() - new interface for extensions. All extensions/function changed to work as cursor().
+	* __uni_parseFunc(): parse named arguments (example: /array(id = 1, value1 = 'test'))
+	* .../...%s... - sscanf can be used to filter by key
+	* __uni_parseFunc(): `, ```, ``````` - recognize for indicating the beginning and end of the string
+	* SQL: now data in database can be changed using uni()!
+	* SQL: new_row() - for INSERT queries, last_error(), last_insert_id(), last_affected_rows(), group_by() - fro GROUP BY clause
+	* SQL: support mysql_* added
+	* class Uni(): for OOP style programing. Implement ArrayIterator interface! But can be buggy :(
+	* ZIP: asZipFile() - for read zip-archives, .../NNN/contents(), .../NNN/saveAs()
+	* new functions: first(), next(), all(), ifNull(), url(), open(), replace() - to map array items, array() - to create arrays on the fly, key(), key(name%i), normalize_float()
+	* deleted $uni_cache_data. Now cache() save data in $GLOBALS!
+	* trigger_error() - used for all internal errors and warnings
+	* $__uni_optimeze - default is 1 (optimize simple unipaths)
+	* $GLOBALS['unipath_benchmark']: true - for internal measuring execution time
+	
 2016-02-07  Saemon Zixel  <saemonzixel@gmail.com>
 
 	* version 1.7.8dev
