@@ -1156,6 +1156,50 @@ if(isset($_GET['test_uniPath'])) {
 	assert('$rows == array(array("cat_deleted" => 0), array("cat_deleted" => 2)); /* '.print_r($rows, true).' */');
 	unset($GLOBALS['unipath_debug_sql']);
 // $GLOBALS['unipath_debug'] = false;
+
+	$GLOBALS['db1']->exec("CREATE TABLE categories_stat (
+		cat_id INTEGER PRIMARY KEY,
+		cat_stat TEXT
+	);");
+	
+	$unipath = "/db1/categories[cat_hidden=0]++categories_stat[categories_stat.cat_id=categories.cat_id]/asSQLQuery()";
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+	assert("\$result == array('query' => 'SELECT * FROM categories LEFT OUTER JOIN categories_stat ON categories_stat.cat_id = categories.cat_id WHERE cat_hidden = 0', 'params' => array()); /* ".print_r($result, true).' */');
+	
+	$unipath = "/db1/categories[cat_hidden=0]++categories_stat[categories_stat.cat_id=categories.cat_id]/all()";
+	echo "<h3>--- $unipath ---</h3>";
+	$result = uni($unipath);
+// var_export($result);
+	assert("\$result == array(array(
+		'cat_id' => NULL,
+		'cat_parent_id' => '0',
+		'cat_name' => 'Category 1',
+		'cat_url' => NULL,
+		'cat_type' => NULL,
+		'cat_code1c' => 'CODE0000001',
+		'cat_deleted' => '0',
+		'cat_hidden' => '0',
+		'cat_sort_order' => '1000.0',
+		'cat_modified_stamp' => NULL,
+		'cat_data_json_encoded' => NULL,
+		'cat_stat' => NULL,
+	),
+	array(
+		'cat_id' => NULL,
+		'cat_parent_id' => '0',
+		'cat_name' => 'Category 2',
+		'cat_url' => NULL,
+		'cat_type' => NULL,
+		'cat_code1c' => 'CODE0000002',
+		'cat_deleted' => '2',
+		'cat_hidden' => '0',
+		'cat_sort_order' => '1000.0',
+		'cat_modified_stamp' => NULL,
+		'cat_data_json_encoded' => NULL,
+		'cat_stat' => NULL,
+	)); /* ".print_r($result, true).' */');
+// $GLOBALS['unipath_debug'] = false;
 	
 	$unipath = "/db1/categories[1]/cache(/db1_cats)";
 	echo "<h3>--- $unipath ---</h3>";
@@ -1200,6 +1244,127 @@ if(isset($_GET['test_uniPath'])) {
 //$GLOBALS['unipath_debug'] = true;
 	uni($unipath.'/assertEqu()', '<span class="obj_page-photo-wrp"><img class="obj_page-photo-img" src="/Media/Default/newbilding/gallery/фото-1.jpg" alt="" /></span> <span class="obj_page-photo-wrp"><img class="obj_page-photo-img" src="/Media/Default/newbilding/gallery/фото-2.jpg" alt="" /></span> <span class="obj_page-photo-wrp"><img class="obj_page-photo-img" src="/Media/Default/newbilding/gallery/фото-3.jpg" alt="" /></span>');
 	echo "</xmp>";
+	
+	$unipath = "/db1/categories[1]";
+	echo "<h3>--- new Uni($unipath) ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
+	$result = new Uni($unipath);
+	assert('get_class($result) == "Uni"; /* '.print_r(get_class($result), true).' */');
+	
+	$result_rewind = $result->rewind();
+	assert("!empty(\$result_rewind); /* ".print_r($result_rewind, true).' */');
+	
+	$result_valid = $result->valid();
+	assert("\$result_valid == true; /* ".print_r($result_valid, true).' */');
+	
+	$result_current = $result->current();
+	assert("\$result_current->data == array(
+		'cat_id' => '1',
+		'cat_parent_id' => '0',
+		'cat_name' => 'Category 1',
+		'cat_url' => NULL,
+		'cat_type' => NULL,
+		'cat_code1c' => 'CODE0000001',
+		'cat_deleted' => '0',
+		'cat_hidden' => '0',
+		'cat_sort_order' => '1000.0',
+		'cat_modified_stamp' => NULL,
+		'cat_data_json_encoded' => NULL,
+	); /* ".print_r($result_current->data, true).' */');
+	
+	$result_key = $result->key();
+	assert("\$result_key === 0; /* ".print_r($result_key, true).' */');
+	
+	$result_next = $result->next();
+	assert("\$result_next->data == array(
+		'cat_id' => '2',
+		'cat_parent_id' => '0',
+		'cat_name' => 'Category 2',
+		'cat_url' => NULL,
+		'cat_type' => NULL,
+		'cat_code1c' => 'CODE0000002',
+		'cat_deleted' => '2',
+		'cat_hidden' => '0',
+		'cat_sort_order' => '1000.0',
+		'cat_modified_stamp' => NULL,
+		'cat_data_json_encoded' => NULL,
+	); /* ".var_export($result_next->data, true).' */');
+	
+	$result_valid = $result->valid();
+	assert("\$result_valid == true; /* ".print_r($result_valid, true).' */');
+	
+	$result_current = $result->current();
+	assert("\$result_current->data == array(
+		'cat_id' => '2',
+		'cat_parent_id' => '0',
+		'cat_name' => 'Category 2',
+		'cat_url' => NULL,
+		'cat_type' => NULL,
+		'cat_code1c' => 'CODE0000002',
+		'cat_deleted' => '2',
+		'cat_hidden' => '0',
+		'cat_sort_order' => '1000.0',
+		'cat_modified_stamp' => NULL,
+		'cat_data_json_encoded' => NULL,
+	); /* ".var_export($result_current->data, true).' */');
+	
+	$result_key = $result->key();
+	assert("\$result_key === 1; /* ".var_export($result_key, true).' ('.var_export($result->current_cursor_result['data_tracking'], true).') */');
+	
+	$result_next = $result->next();
+	assert("\$result_next == null /* ".var_export($result_next, true).' */');
+	
+	$result_current = $result->current();
+	assert("\$result_current == null /* ".print_r($result_current, true).' */');
+	
+	$result_key = $result->key();
+	assert("\$result_key === null; /* ".var_export($result_key, true).' */');
+	
+	$result_rewind = $result->rewind();
+	assert("!empty(\$result_rewind); /* ".print_r($result_rewind, true).' */');
+
+	foreach($result as $key => $val) {
+		switch($key) {
+			case 0:
+				$key0_found = true;
+				assert("/* $key */ \$val->data == array(
+					'cat_id' => '1',
+					'cat_parent_id' => '0',
+					'cat_name' => 'Category 1',
+					'cat_url' => NULL,
+					'cat_type' => NULL,
+					'cat_code1c' => 'CODE0000001',
+					'cat_deleted' => '0',
+					'cat_hidden' => '0',
+					'cat_sort_order' => '1000.0',
+					'cat_modified_stamp' => NULL,
+					'cat_data_json_encoded' => NULL,
+				); /* ".print_r($val->data, true).' */');
+				
+				$val2 = $val['cat_name'];
+				assert('is_string($val2); /* '.print_r($val2, true).' */');
+				break;
+			case 1:
+				$key1_found = true;
+				assert("/* $key */ \$val->data == array(
+					'cat_id' => '2',
+					'cat_parent_id' => '0',
+					'cat_name' => 'Category 2',
+					'cat_url' => NULL,
+					'cat_type' => NULL,
+					'cat_code1c' => 'CODE0000002',
+					'cat_deleted' => '2',
+					'cat_hidden' => '0',
+					'cat_sort_order' => '1000.0',
+					'cat_modified_stamp' => NULL,
+					'cat_data_json_encoded' => NULL,
+				); /* ".var_export($val->data, true).' */');
+				break;
+			default:
+				var_dump($key, $val);
+		}
+	}
+	assert('$key0_found == true and $key1_found == true; /* '.var_export(array('key0_found' => $key0_found, 'key1_found' => $key1_found), true).' */');
 	
 	$unipath = "/_GET/split(';')";
 	echo "<h3>--- $unipath ---</h3>";

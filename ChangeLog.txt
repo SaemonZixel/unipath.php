@@ -1,3 +1,12 @@
+2016-04-18  Saemon Zixel  <saemonzixel@gmail.com>
+	
+	* version 2.0.1-dev
+	* class Uni: refactored and repeared, add Uni::<func_name>(args) for easy call _uni_<func_name>()
+	* SQL: table1++table2 -> table1 LEFT OUTER JOIN table2
+	* bugfixes in resize()
+	* next(arg1, arg2) - return array(arg1, arg2) for next data element
+	* same bugfixes and new tests
+
 2016-04-08  Saemon Zixel  <saemonzixel@gmail.com>
 
 	* version 2.0-dev
@@ -15,6 +24,7 @@
 	* trigger_error() - used for all internal errors and warnings
 	* $__uni_optimeze - default is 1 (optimize simple unipaths)
 	* $GLOBALS['unipath_benchmark']: true - for internal measuring execution time
+	* many bugfixes, tests and new bugs...
 	
 2016-02-07  Saemon Zixel  <saemonzixel@gmail.com>
 

@@ -3,7 +3,7 @@
 /**
  *  UniPath - XPath like access to DataBase, Files, XML, Arrays and any other data from PHP
  *  
- *  @version: 2.0-dev
+ *  @version: 2.0.1-dev
  *  @author: Saemon Zixel (saemon-zixel.ru) on 2013-2016 year
  *
  *	UniversalPath (UniPath.php) - универсальный доступ к любым ресурсам
@@ -75,9 +75,15 @@ function uni($unipath) {
 // тот-же uni(), но с указанием стартовых данных
 // $data_tracking = array('pos()' => 1, 'key()' => 1, ...)
 function __uni_with_start_data($data, $data_type, $data_tracking, $unipath) {
+	
+	if(empty($unipath)) {
+		$stacktrace = debug_backtrace();
+		trigger_error('UniPath: unipath is empty! ('.$stacktrace[1]['function'].')', E_USER_NOTICE);
+		return array('data' => $data, 'data_type' => $data_type, 'data_tracking' => $data_tracking);
+	}
 
 	// возможно, просто просят взять определённое поле без присвоения? - тогда оптимизируем
-	if(!empty($GLOBALS['__uni_optimeze']) and func_num_args() < 5 and ($unipath[0] == '/' or !is_array($data_tracking) or empty($data_tracking['cursor()']))) {
+	if(!empty($GLOBALS['__uni_optimeze']) and func_num_args() < 5 and !empty($unipath) and ($unipath[0] == '/' or !is_array($data_tracking) or empty($data_tracking['cursor()']))) {
 		$unipath_len = strlen($unipath);
 		
 		if(strspn($unipath, 'qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_0123456789') == $unipath_len) 
@@ -261,9 +267,10 @@ function __uni_func($func_name, $data, $data_type = null) {
 }
 
 class Uni extends ArrayIterator {
-	public $tree;
-	public $last_tree_node;
-	public $current_cursor_result; // для cursor
+	public $tree; // разобранная и выполненое дерево текущего unipath
+	public $data; // текущие данные последнего узла в дереве
+	public $data_type;
+	public $data_tracking;
 
 	function Uni($unipath_or_data, $data_type = null, $data_tracking = null) {
 	
@@ -273,7 +280,8 @@ class Uni extends ArrayIterator {
 				array(
 					'name' => '', 
 					'data' => $unipath_or_data,
-					'data_type' => $data_type)
+					'data_type' => $data_type,
+					'unipath' => null)
 			);
 			if(func_num_args() > 2)
 				$this->tree[0]['data_tracking'] = $data_tracking;
@@ -289,97 +297,134 @@ class Uni extends ArrayIterator {
 		}
 		
 		// будем работать с последним узлом т.к. там конечный рзультат
-		$this->last_tree_node =& $this->tree[count($this->tree)-1];
-// print_r($this->last_tree_node);
+		$lv = count($this->tree)-1;
+		$this->unipath = $this->tree[$lv]['unipath'];
+		$this->data =& $this->tree[$lv]['data'];
+		$this->data_type =& $this->tree[$lv]['data_type'];
+		if(isset($this->tree[$lv]['data_tracking']))
+			$this->data_tracking =& $this->tree[$lv]['data_tracking'];
+		else
+			$this->data_tracking = array();
 	}
 	
 	function rewind() { 
-// var_dump('Uni: rewind');
+// var_dump("Uni: ".__FUNCTION__);
 		// cursor()
-		if(isset($this->last_tree_node['data_tracking']) and isset($this->last_tree_node['data_tracking']['cursor()'])) {
-			$call_result = call_user_func($this->last_tree_node['data_tracking']['cursor()'], array($this->last_tree_node), 0, 'rewind');
+		if(isset($this->data_tracking['cursor()'])) {
+		
+			// удалим результыты последнего обхода
+			unset($this->current_cursor_result);
+
+			// теперь перемотаем в начало
+			$call_result = call_user_func(
+				$this->data_tracking['cursor()'], 
+				array(array(
+					'data' => & $this->data,
+					'data_type' => & $this->data_type,
+					'data_tracking' => & $this->data_tracking,
+					'unipath' => $this->unipath
+				)), 
+				0, 'rewind');
 			
 			// промежуточные переменные курсора перенесём в наш data_tracking
 			if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-				$this->last_tree_node['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
+				$this->data_tracking['cursor_vars'] = $call_result['cursor_vars'];
 				unset($call_result['cursor_vars']);
 			}
 			
-			return $call_result;
+			return $call_result[0];
 		}
 		
 		// normal data
-		if(is_array($this->last_tree_node['data']))
-			return reset($this->last_tree_node['data']);
+		if(is_array($this->data))
+			return reset($this->data);
 		
 		return true;
 	}
 	
 	function current() { 
-
+// var_dump("Uni: ".__FUNCTION__);
 		// cursor()
-		if(isset($this->current_cursor_result['data_tracking']) and isset($this->current_cursor_result['data_tracking']['cursor()'])) {
+		if(isset($this->current_cursor_result)) {
 // var_dump('Uni: current: cursor()');
 			return new Uni(
 				$this->current_cursor_result['data'], 
 				$this->current_cursor_result['data_type'], 
-				$this->current_cursor_result['data_tracking']);
+				isset($this->current_cursor_result['data_tracking']) ? $this->current_cursor_result['data_tracking'] : null);
+		} 
+		elseif(property_exists($this, 'current_cursor_result')) {
+			return null;
 		}
 		
 		// normal data
-		$tmp = $this->last_tree_node['data'];
-		return new Uni($tmp, gettype($tmp));
+		$result = current($this->data);
+		return new Uni($result, gettype($result));
 	}
 	
 	function key() { 
-
+// var_dump("Uni: ".__FUNCTION__);
 		// cursor()
-		if(isset($this->last_tree_node['data_tracking']) and isset($this->last_tree_node['data_tracking']['cursor()'])) {
-			return $this->current_cursor_result['data_tracking']['key()'];
+		if(isset($this->data_tracking['cursor()'])) {
+			if(isset($this->current_cursor_result['data_tracking'], $this->current_cursor_result['data_tracking']['key()']))
+				return $this->current_cursor_result['data_tracking']['key()'];
+			else 
+				return null;
 		}
 		
 		// normal data
-		if(is_array($this->last_tree_node['data']))
-			return key($this->last_tree_node['data']);
+		if(is_array($this->data))
+			return key($this->data);
 		else
 			return 0;
 	}
 	
 	function next() { 
+// var_dump("Uni: ".__FUNCTION__);
 		// cursor()
-		if(isset($this->last_tree_node['data_tracking']) and isset($this->last_tree_node['data_tracking']['cursor()'])) {
-			/* skip */
+		if(isset($this->data_tracking['cursor()'])) {
+
+			$call_result = call_user_func(
+				$this->data_tracking['cursor()'], 
+				array(array(
+					'data' => & $this->data,
+					'data_type' => & $this->data_type,
+					'data_tracking' => & $this->data_tracking,
+					'unipath' => $this->unipath
+				)), 
+				0, 'next');
+			
+			// промежуточные переменные курсора перенесём в data_tracking
+			if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
+				$this->data_tracking['cursor_vars'] = $call_result['cursor_vars'];
+				unset($call_result['cursor_vars']);
+			}
+			
+			$this->current_cursor_result = empty($call_result) ? null : $call_result;
+			
+			return $this->current();
 		}
 	
-		if(is_array($this->last_tree_node['data']))
-			return next($this->last_tree_node['data']);
+		if(is_array($this->data))
+			return next($this->data);
 		else
 			return false;
 	}
 	
 	function valid() { 
-	
+// var_dump("Uni: ".__FUNCTION__.", property_exists(\$this->current_cursor_result) = ".(property_exists($this, 'current_cursor_result')?'true':'false'));
 		// cursor() - сразу возмём следующую строку
-		if(isset($this->last_tree_node['data_tracking']) and isset($this->last_tree_node['data_tracking']['cursor()'])) {
-			$call_result = call_user_func(
-				$this->last_tree_node['data_tracking']['cursor()'], 
-				array($this->last_tree_node), 
-				0, 'next');
-			
-			// промежуточные переменные курсора перенесём в data_tracking
-			if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-				$this->last_tree_node['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-				unset($call_result['cursor_vars']);
-			}
-			
-			$this->current_cursor_result = $call_result;
-			
-			return !empty($call_result);
+		if(isset($this->data_tracking['cursor()'])) {
+		
+			// ещё не начинали обход - запустим сами
+			if(property_exists($this, 'current_cursor_result') == false)
+				$this->next();
+// print_r($this->current_cursor_result);
+			return empty($this->current_cursor_result) == false;
 		}
 		
 		// normal data
-		if(is_array($this->last_tree_node['data']))
-			$key = key($this->last_tree_node['data']);
+		if(is_array($this->data))
+			$key = key($this->data);
 		else
 			$key = false;
 			
@@ -387,16 +432,16 @@ class Uni extends ArrayIterator {
 	}
 	
 	function count() { 
-	
+// var_dump("Uni: ".__FUNCTION__);
 		// cursor()
-		if(isset($this->last_tree_node['data_tracking']) and isset($this->last_tree_node['data_tracking']['cursor()'])) {
-			trigger_error('UniPath: cursor() not countable!');
+		if(isset($this->data_tracking['cursor()'])) {
+			trigger_error('Uni: cursor() not countable!');
 			return 0;
 		}
 	
 		// normal data
-		if(is_array($this->last_tree_node['data']))
-			return count($this->last_tree_node['data']);
+		if(is_array($this->data))
+			return count($this->data);
 		else
 			return 1;
 	}
@@ -409,21 +454,44 @@ class Uni extends ArrayIterator {
 // 		trigger_error("Not implemented! Uni->offsetSet('$offset_as_unipath') = ...", E_USER_NOTICE);
 		
 		return __uni_with_start_data(
-			$this->last_tree_node['data'], 
-			$this->last_tree_node['data_type'],
-			array_key_exists('data_tracking', $this->last_tree_node) ? $this->last_tree_node['data_tracking'] : null,
+			$this->data, 
+			$this->data_type,
+			$this->data_tracking,
 			$offset_as_unipath,
 			$set_value
 			);
 	}
 	
 	function offsetGet($offset_as_unipath) {
-		return __uni_with_start_data(
-			$this->last_tree_node['data'], 
-			$this->last_tree_node['data_type'],
-			array_key_exists('data_tracking', $this->last_tree_node) ? $this->last_tree_node['data_tracking'] : null,
+		$uni_result = __uni_with_start_data(
+			$this->data, 
+			$this->data_type,
+			$this->data_tracking,
 			$offset_as_unipath
 			);
+			
+		if(array_key_exists('data', $uni_result) == false)
+			return new Uni($uni_result['data'], $uni_result['data_type'], $uni_result['data_tracking']);
+		else
+			return $uni_result['data'];
+	}
+	
+	function __call($name, $arguments) {
+		trigger_error("Uni: \$this->$name() not exists! (".print_r($argumnets, true).')', E_USER_ERROR);
+	}
+	
+	static public function __callStatic($uni_func_name, $arguments) {
+		if(function_exists("_uni_{$uni_func_name}") == false) {
+			trigger_error('Uni: '.__FUNCTION__.": _uni_{$uni_func_name} does not exist!", E_USER_ERROR);
+			return null;
+		}
+		
+		$result = call_user_func("_uni_{$uni_func_name}", array(
+			array('name' => '?start_data?', 'data' => $arguments[0], 'data_type' => gettype($arguments[0])), 
+			array('name' => $uni_func_name.'()', 'data' => null)), 
+		1);
+	
+		return isset($result['data']) ? $result['data'] : null;
 	}
 }
 
@@ -632,7 +700,8 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 										default:
 											$filter[$expr]['right_sql'][] = "'".str_replace("'","''",$val)."'";
 									}
-									$filter[$expr]['right_sql'] = implode(',', $filter[$expr]['right_sql']);
+									$filter[$expr]['right_sql'] = '(' . implode(',', $filter[$expr]['right_sql']) . ')';
+									$filter[$expr]['op'] = 'IN';
 								} 
 								else
 									$filter[$expr]['right_sql'] = strval($value);
@@ -706,6 +775,8 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 					} else
 					if(empty($filter[$last_expr]['sql']))
 						$sql_join .= " NATURAL JOIN $tbl_name";
+					elseif(isset($tree[$lv]["separator$suffix"]) and $tree[$lv]["separator$suffix"] == '++')
+						$sql_join .= " LEFT OUTER JOIN $tbl_name ON ".$filter[$last_expr]['sql'];
 					else
 						$sql_join .= " LEFT JOIN $tbl_name ON ".$filter[$last_expr]['sql'];
 				}
@@ -889,8 +960,8 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 				$lv = $correct_lv;
 		}
 		
-		// next()
-		elseif($name == 'next()') {
+		// next(...)
+		elseif(strpos($name, 'next(') === 0) {
 			assert('isset($tree[$lv-1]["data_tracking"]);');
 			assert('is_array($tree[$lv-1]["data_tracking"]);');
 			assert('isset($tree[$lv-1]["data_tracking"]["cursor()"]);') or var_dump($tree[$lv-1]);
@@ -904,15 +975,39 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 				unset($call_result['cursor_vars']);
 			}
 				
-			// если ответ это одна запись, то преобразуем в массив с одной записьмю
+			// если ответ это норамальные данные
 			if(is_array($call_result) and !empty($call_result)) {
 				$tree[$lv]['data'] = $call_result['data'];
 				$tree[$lv]['data_type'] = $call_result['data_type'];
 				$tree[$lv]['data_tracking'] = $call_result['data_tracking'];
 			}
+			// иначе ничего нет
 			else {
 				$tree[$lv]['data'] = null;
 				$tree[$lv]['data_type'] = 'null';
+			}
+			
+			// next(...)
+			if($name != 'next()') {
+				list($args, $args_types) = __uni_parseFunc($name);
+				foreach($args_types as $key => $arg_type) {
+					if($arg_type == 'unipath') {
+						$uni_result = __uni_with_start_data(
+							$tree[$lv]['data'], 
+							$tree[$lv]['data_type'], 
+							empty($tree[$lv]['data_tracking']) ? null : $tree[$lv]['data_tracking'],
+							$args[$key]);
+							
+						// кастыль, чтоб были по номерам
+						if(strpos($key, 'arg') === 0) {
+							$args[intval(substr($key, 3))-1] = $uni_result['data'];
+							unset($args[$key]);
+						} else
+							$args[$key] = $uni_result['data'];
+					}
+				}
+				$tree[$lv]['data'] = $args;
+				$tree[$lv]['data_type'] = 'array';
 			}
 		}
 		
@@ -1607,8 +1702,12 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 						$suffix = "_$i";
 						break;
 					}
-				$tree[count($tree)-1]['separator'.$suffix] = $xpath[$p];
-				$p++;
+					
+				$separator = '';
+				while(isset($xpath[$p]) and $xpath[$p] == '+' or $xpath[$p] == ',')
+					$separator .= $xpath[$p++];
+
+				$tree[count($tree)-1]['separator'.$suffix] = $separator;
 				
 				continue;
 			}
@@ -2591,7 +2690,7 @@ var_dump($tree[$lv]['name']." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($curso
 				$GLOBALS['unipath_debug_sql'][] = $sql_query;
 			else
 // 				trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
-				echo 'UniPath: '.__FUNCTION__.': '.$sql_query; // error_reporting(0);
+				echo "\nUniPath: ".__FUNCTION__.': '.$sql_query; // error_reporting(0);
 		}
 		
 		// ещё не выполнянли запрос - выполним
@@ -2758,6 +2857,8 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.": start \$cursor_va
 							'tables' => &$data_tracking['tables'])
 				);
 			} 
+			elseif(count($result) < 3)
+				return array('cursor_vars' => $cursor_vars);
 				
 			return array_merge($result, array('cursor_vars' => $cursor_vars));
 		} 
@@ -2836,6 +2937,8 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.': cursor_vars[stmt]
 						: array('key()' => $pos-1, 'pos()' => $pos-1)
 					);
 			} 
+			elseif(count($result) < 3)
+				return array('cursor_vars' => $cursor_vars);
 			
 // var_dump("result *** ", array_merge($result, array('cursor_vars' => $cursor_vars)));
 			return array_merge($result, array('cursor_vars' => $cursor_vars));
@@ -3143,7 +3246,7 @@ function __cursor_database_set($tree, $lv, $set_value, $cursor_arg1_data_type = 
 				$GLOBALS['unipath_debug_sql'][] = $sql_upd;
 			else
 // 				trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
-				echo 'UniPath: '.__FUNCTION__.': '.$sql_upd; // error_reporting(0);
+				echo "\nUniPath: ".__FUNCTION__.': '.$sql_upd; // error_reporting(0);
 		}
 
 		$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = null;
@@ -3316,7 +3419,7 @@ var_dump('!!! bad $val = ', print_r($val, true));
 				$GLOBALS['unipath_debug_sql'][] = $sql;
 			else
 // 				trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
-				echo 'UniPath: '.__FUNCTION__.': '.$sql; // error_reporting(0);
+				echo "\nUniPath: ".__FUNCTION__.': '.$sql; // error_reporting(0);
 		}
 
 		// MySQL
@@ -4705,7 +4808,7 @@ function _uni_html_attr_safe($tree, $lv = 0) {
 
 function _uni_asImageFile($tree, $lv = 0) {
 
-		if(!in_array($tree[$lv-1]['data_type'], array('string/pathname')))
+		if(!in_array($tree[$lv-1]['data_type'], array('string/pathname', 'string/url')))
 			return array('data' => $tree[$lv-1]['data'], 'data_type' => $tree[$lv-1]['data_type']);
 		
 		// определим тип и загрузим фото
@@ -4737,25 +4840,25 @@ function _uni_resize($tree, $lv = 0) {
 	if(!isset($args['arg1']))
 		$new_width = '';
 	elseif($args_types['arg1'] == 'unipath')
-		$new_width = uni($args['arg1']);
+		$new_width = __uni_with_start_data($tree[$lv-1]["data"], $tree[$lv-1]["data_type"], $tree[$lv-1]["data_tracking"], $args['arg1']);
 	else
 		$new_width = $args['arg1'];
 		
 	if(!isset($args['arg2']))
 		$new_height = '';
-	elseif($func_and_args['arg2:type'] == 'unipath')
-		$new_height = uni($args['arg2']);
+	elseif($args_types['arg2'] == 'unipath')
+		$new_height = __uni_with_start_data($tree[$lv-1]["data"], $tree[$lv-1]["data_type"], $tree[$lv-1]["data_tracking"], $args['arg2']);
 	else
 		$new_height = $args['arg2'];
 		
-	if(!isset($func_and_args['arg3']))
+	if(empty($args['arg3']))
 		$resize_mode = '';
-	elseif($func_and_args['arg3_type'] == 'unipath')
-		$resize_mode = uni($func_and_args['arg3']);
+	elseif($args_types['arg3'] == 'unipath')
+		$resize_mode = __uni_with_start_data($tree[$lv-1]["data"], $tree[$lv-1]["data_type"], $tree[$lv-1]["data_tracking"], $args['arg3']);
 	else
-		$resize_mode = $func_and_args['arg3'];
+		$resize_mode = $args['arg3'];
 	
-	assert('is_resource($tree[$lv-1]["data"])');
+	assert('is_resource($tree[$lv-1]["data"])') or print_r($tree[$lv-1]);
 	assert('isset($tree[$lv-1]["data_tracking"])') or print_r($tree);
 	
 	// расчитываем новые размеры в соответствии с указанным режимом
