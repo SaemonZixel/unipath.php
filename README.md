@@ -74,6 +74,9 @@ DataBase
 	//  456 => array('id' => 2, 'field1' => 456, 'field2' => 'abc')
 	// );
 	
+DataBase (UPDATE, INSERT)
+-------------------------
+
 	uni("/db1/table1[id = 1]", array('field1' => 999));
 	// array('field1' => 999);
 	
@@ -162,6 +165,33 @@ Array
 	
 	uni("/array1/aa%s[. > 111]")
 	// array('aab' => 112);
+	
+OOP
+---
+	global $mysqli_obj; // for 5.3 and upper
+	
+	$mysqli_obj = uni("/MySQLi/MySQLi('127.0.0.1', 'user', 'password', 'database1')")
+	// object(mysqli)#1 { ... }
+	
+	uni("/mysqli_obj/host_info")
+	// "127.0.0.1 via TCP/IP"
+	
+	uni("/mysqli_obj/query('SELECT * FROM `users` WHERE `user_banned` = 1')")
+	// object(mysqli_result) {
+	//		'current_field' => 0,
+    //		'field_count' => 3,
+	//		'lengths' => null,
+    //		'num_rows' => 129006,
+    //		'type' => 0,
+    //	}
+
+    uni("/mysqli_obj/query(```SELECT * FROM `users` WHERE `user_banned` = 1```)/fetch_assoc()")
+    // array(
+	//	'user_id' => 1,
+	//	'user_name' => 'test',
+	//	'user_banned' => 1
+    // )
+
 	
 XML
 ---

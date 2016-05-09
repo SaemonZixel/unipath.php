@@ -1,3 +1,13 @@
+2016-05-09  Saemon Zixel  <saemonzixel@gmail.com>
+
+	* version 2.1-dev
+	* SQL: sql_result_cache(...) for reiterate, support NULL on update
+	* OOP: Class::<static_method>(), Class::<__construct | Class>() -> new Class(), Object-><property>, Object-><method>(arg1, ...)
+	* next_with_key(), next() dasn`t accept arguments now!
+	* unipath_tests.php: auto search extensions and launch tests from them
+	* unipath.linedoc.php: extension for parse LineDocument format
+	* some bugfixes
+
 2016-04-18  Saemon Zixel  <saemonzixel@gmail.com>
 	
 	* version 2.0.1-dev
