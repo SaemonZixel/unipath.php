@@ -22,6 +22,8 @@ echo'<!doctype html>
 	
 require_once('unipath.php');
 
+$__uni_prt_cnt = 1000; // для тестов хватит
+
 // -------------- TESTS ------------------------------
 
 if(isset($_GET['test_parseUniPath'])) {
@@ -123,9 +125,9 @@ if(isset($_GET['test_parseUniPath'])) {
 	$unipath = "/default_Orchard_Framework_ContentItemRecord[ContentType_id=11,14 and Published=1 and (like(Data, N'%abc%') or ContentItemRecord_id = 'abc' or like(Title, N'%abc%'))]";
 	echo "<h3>--- $unipath ---</h3>";
 	$tree = __uni_parseUniPath($unipath);
-	_cursor_assertEqu(array(array('name' => "assertEqu('test_barckets')", 'data' => $tree[1])), 
-		0, 'set',
-		array('filter' => array(
+	assert("\$tree[1] == array(
+	'name' => 'default_Orchard_Framework_ContentItemRecord',
+	'filter' => array(
 		'start_expr' => 'expr1',
 		'expr1' => array(
 			'left' => 'ContentType_id', 
@@ -174,11 +176,12 @@ if(isset($_GET['test_parseUniPath'])) {
 			'left' => 'expr5',
 			'left_type' => 'expr',
 			'op' => 'or',
-			'right' => "like(Title, N'%abc%')",
+			'right' => \"like(Title, N'%abc%')\",
 			'right_type' => 'function',
 			'next' => 'expr4',
 			'close_braket' => true)
-		)));
+		),
+	'unipath' => \"/default_Orchard_Framework_ContentItemRecord[ContentType_id=11,14 and Published=1 and (like(Data, N'%abc%') or ContentItemRecord_id = 'abc' or like(Title, N'%abc%'))]\"); /* ".print_r($tree[1], true)." */");
 	
 	$unipath = "/objs[@name = 'dummy']"; 
 	echo "<h3>--- $unipath ---</h3>";
@@ -287,7 +290,9 @@ if(isset($_GET['test_parseUniPath'])) {
 		
 	$unipath = "db1/alias('default_Orchard_Autoroute_AutoroutePartRecord', 'urls')[like(DisplayAlias, '404notfound%') and Published = 1 and Latest = 1]+alias('default_Orchard_Framework_ContentItemVersionRecord','vers')[urls.Id = vers.Id]/columns('vers.ContentItemRecord_id, urls.DisplayAlias, vers.Id as ver_id')";
 	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
 	$tree = __uni_parseUniPath($unipath);
+// $GLOBALS['unipath_debug'] = false;
 //print_r($tree);
 /*	_cursor_assertEqu(
 		array(array('name' => "assertEqu('test_cache_to_file')", 'data' => $tree[2])),
@@ -367,11 +372,8 @@ if(isset($_GET['test_parseUniPath'])) {
 	$unipath = "/db1/table1[id=1]/columns(chunked(table1.Data, 10000, 3000), alias('table1.Id', 'id1'), 'table1.ContentType_id, REPLACE(''abcd)asd'', '')'', ''('')')/asSQLQuery()";
 	echo "<h3>--- $unipath ---</h3>";
 	$tree = __uni_parseUniPath($unipath);
-	_cursor_assertEqu(
-		array(array('name' => 'parse_columns_chunked', 'data' => $tree[3])), 
-		0, 'set',
-		array('name' => "columns(chunked(table1.Data, 10000, 3000), alias('table1.Id', 'id1'), 'table1.ContentType_id, REPLACE(''abcd)asd'', '')'', ''('')')",
-		'unipath' => "/db1/table1[id=1]/columns(chunked(table1.Data, 10000, 3000), alias('table1.Id', 'id1'), 'table1.ContentType_id, REPLACE(''abcd)asd'', '')'', ''('')')"));
+	assert("\$tree[3] == array('name' => \"columns(chunked(table1.Data, 10000, 3000), alias('table1.Id', 'id1'), 'table1.ContentType_id, REPLACE(''abcd)asd'', '')'', ''('')')\",
+		'unipath' => \"/db1/table1[id=1]/columns(chunked(table1.Data, 10000, 3000), alias('table1.Id', 'id1'), 'table1.ContentType_id, REPLACE(''abcd)asd'', '')'', ''('')')\"); /* ".print_r($tree[3], true).' */');
 		
 	$unipath = "/row_data/newbarea/add(', ')/add(row_data/newbadress/regexp_replace('^[0-9]+\.',''))/remove_end(', ')/remove_start(', ')/ifEmpty('&mdash;')";
 	echo "<h3>--- $unipath ---</h3>";
@@ -576,21 +578,20 @@ if(isset($_GET['test_parseUniPath'])) {
 	
 	$unipath = "/.[DataXML/ulstreet='Депутатская','Учительская', \"Лермонтова\", `Пирогова`, 'Грибоедова', 'Дмитриевой', 'Комсомольская', 'Лысая']";
 	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug_parse'] = true;
 	$tree = __uni_parseUniPath($unipath);
-	_cursor_assertEqu(
-		array(array('name' => 'parse_filter_list_of_strings', 'data' => $tree[1])), 
-		0, 'set',
-		array('name' => '.', 
+	assert("\$tree[1] == array('name' => '.', 
 			'filter' => array('start_expr' => 'expr1',
 			'expr1' => array(
 				'left' => 'DataXML/ulstreet',
 				'left_type' => 'unipath',
 				'op' => '=',
 				'right' => array('Депутатская', 'Учительская', 'Лермонтова', 'Пирогова', 'Грибоедова', 'Дмитриевой', 'Комсомольская', 'Лысая'),
-				'right_type' => 'list_of_strings')), 
-			'unipath' => "/.[DataXML/ulstreet='Депутатская','Учительская', \"Лермонтова\", `Пирогова`, 'Грибоедова', 'Дмитриевой', 'Комсомольская', 'Лысая']")
-	);
-//print_r($tree);
+				'right_type' => 'list_of_strings')
+			), 
+			'unipath' => '/.[DataXML/ulstreet=\\'Депутатская\\',\\'Учительская\\', \"Лермонтова\", `Пирогова`, \\'Грибоедова\', \\'Дмитриевой\', \\'Комсомольская\\', \\'Лысая\\']'); /* ".print_r($tree[1], true).' */');
+// print_r($tree);
+// $GLOBALS['unipath_debug_parse'] = false;
 
 	$unipath = "_SERVER/DOCUMENT_ROOT/asDirectory()/objs/10597/Pictures/'фото 2-1.JPG'";
 	echo "<h3>--- $unipath ---</h3>";
@@ -651,10 +652,10 @@ echo "<h3>--- $unipath ---</h3>";
 	assert("\$tree[7] == array('name' => '$fs_filename', 'unipath' => '_SERVER/DOCUMENT_ROOT/asDirectory()/objs/123/Pictures/\'$fs_filename\''); /* ".print_r($tree[7], true).' */');
 // print_r($tree);
 
-	$func_string = $tree[10]['name'];
+	$func_string = $tree[11]['name'];
 	echo "<h3>--- $func_string ---</h3>";
 	$result = __uni_parseFuncArgs($func_string);
-	assert("\$result = array(array('arg1' => '/tmp/$fs_filename'), array('arg1' => 'string'))");
+	assert("\$result == array(array(0 => '/tmp/$fs_filename'), array(0 => 'string')); /* ".print_r($result, true).' */');
 // print_r($result);
 	
 	$func_string = "add(row_data/newbadress/regexp_replace('^[0-9]+\.',''))";
@@ -666,6 +667,77 @@ echo "<h3>--- $unipath ---</h3>";
 		array("unipath")
 		); /* '.print_r($result, true).' */');
 // $GLOBALS['unipath_debug'] = false;
+	
+	$unipath = '/content/regexp_all(`<a.*?href=[\'"]([^"\']+)`)';
+	echo "<h3><xmp>--- $unipath ---</xmp></h3><xmp>";
+// $GLOBALS['unipath_debug'] = true;
+	$result = __uni_parseUniPath($unipath);
+	assert("\$result[2] == array('name' => 'regexp_all(`<a.*?href=[\'\"]([^\"\']+)`)', 'unipath' => '/content/regexp_all(`<a.*?href=[\'\"]([^\"\']+)`)'); /* ".print_r($result[2], true)." */");
+	echo '</xmp>';
+// $GLOBALS['unipath_debug'] = false;
+	
+	$unipath = '/row/sprintf1(`<a href="/%s/" onclick="return load_album_into_player(%i, \'%s\', \'%s\');"`, post_name, ID, post_title, guid)';
+	echo "<h3><xmp>--- $unipath ---</xmp></h3><xmp>";
+// $GLOBALS['unipath_debug_parse'] = true;
+	$result = __uni_parseUniPath($unipath);
+// print_r($result);
+	assert("\$result[2] == array('name' => 'sprintf1(`<a href=\"/%s/\" onclick=\"return load_album_into_player(%i, \'%s\', \'%s\');\"`, post_name, ID, post_title, guid)', 'unipath' => '/row/sprintf1(`<a href=\"/%s/\" onclick=\"return load_album_into_player(%i, \'%s\', \'%s\');\"`, post_name, ID, post_title, guid)'); /* ".print_r($result[2], true)." */");
+	echo '</xmp>';
+// $GLOBALS['unipath_debug_parse'] = false;
+	
+	$unipath = '/soxp_db()/prm_news[pn_author=/item/fio and pn_ispub=1 and pn_datepublic < /php:date(`Y-m:d H:i:s`)]/order_by(`pn_datepublic DESC`)/limit(1)';
+	echo "<h3><xmp>--- $unipath ---</xmp></h3><xmp>";
+// $GLOBALS['unipath_debug_parse'] = true;
+	$result = __uni_parseUniPath($unipath);
+// var_export($result[2]);
+	assert("\$result[2] == array(
+		'name' => 'prm_news', 
+		'filter' => array(
+			'start_expr' => 'expr1',
+			'expr1' => array(
+				'left' => 'pn_author',
+                'left_type' => 'name',
+                'op' => '=',
+                'right' => '/item/fio',
+                'right_type' => 'unipath',
+                'next' => 'expr3'
+            ),
+            'expr2' => array(
+				'left' => 'expr1',
+				'left_type' => 'expr',
+				'op' => 'and',
+				'next' => 'expr5',
+				'right' => 'expr3',
+				'right_type' => 'expr'
+			),
+            'expr3' => array(
+				'left' => 'pn_ispub',
+				'left_type' => 'name',
+				'op' => '=',
+				'next' => 'expr2',
+				'right' => 1,
+				'right_type' => 'number'
+			),
+			'expr4' => array (
+				'left' => 'expr2',
+				'left_type' => 'expr',
+				'op' => 'and',
+				'next' => NULL,
+				'right' => 'expr5',
+				'right_type' => 'expr',
+			),
+			'expr5' => array (
+				'left' => 'pn_datepublic',
+				'left_type' => 'name',
+				'op' => '<',
+				'next' => 'expr4',
+				'right' => '/php:date(`Y-m:d H:i:s`)',
+				'right_type' => 'unipath',
+			)
+		),
+		'unipath' => '/soxp_db()/prm_news[pn_author=/item/fio and pn_ispub=1 and pn_datepublic < /php:date(`Y-m:d H:i:s`)]'); /* ".print_r($result[2], true)." */");
+	echo '</xmp>';
+// $GLOBALS['unipath_debug_parse'] = false;
 	
 	$func_string = "alias('table1', 'tbl1')";
 	echo "<h3>--- $func_string ---</h3>";
@@ -830,7 +902,21 @@ echo "<h3>--- $unipath ---</h3>";
   )
 ); /* ".print_r($result, true).' */');
 		
-
+	$func_string = 'like(Data, test1=N\'%abc%\', N\'%abc%\')';
+	echo "<h3>--- $func_string ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
+	$result = __uni_parseFuncArgs($func_string);
+// var_export($result);
+	assert("\$result == array(array(0 => 'Data', 'test1' => '%abc%', 1 => '%abc%'), array(0 => 'unipath', 'test1' => 'string-with-N', 1 => 'string-with-N')); /* ".var_export($result, true)." */");
+	
+	$func_string = "if([sprintf1(`%s %s`, name, last_name) = `Тест Тестович`], ' selected=\"selected\"', '')";
+	echo "<h3>--- $func_string ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
+	$result = __uni_parseFuncArgs($func_string);
+// var_export($result);
+	assert("\$result == array(array(0 => '[sprintf1(`%s %s`, name, last_name) = `Тест Тестович`]', 1 => ' selected=\"selected\"', 2 => ''), array(0 => 'unipath', 1 => 'string', 2 => 'string')); /* ".var_export($result, true)." */");
+// $GLOBALS['unipath_debug'] = false;
+	
 /*print_r(__uni_parseUniPath("cache(file://./newbilding.json/contents)/ifEmpty(db1/alias('default_Orchard_Framework_ContentItemRecord','cont')[ContentType_id=11]
 	+alias('default_Orchard_Framework_ContentItemVersionRecord','vers')[cont.Id = vers.ContentItemRecord_id and Latest=1 and Published=1]
 	+alias('default_Orchard_Autoroute_AutoroutePartRecord', 'urls')[urls.Id = vers.Id]
@@ -852,24 +938,14 @@ if(isset($_GET['test_uniPath'])) {
 
 	$tmp = uni($unipath);
 	assert('count($tmp) == 2 /* '.json_encode($tmp).' */');
-	_cursor_assertEqu(
-		array(
-			array('name' => "assertEqu('test_var_filter1')", 'data' => $tmp)),
-			0, 'set',
-			array(0 => array('a' => 1), 1 => array('a' => 1, 'c' => 3))
-	);
+	assert("\$tmp = array(0 => array('a' => 1), 1 => array('a' => 1, 'c' => 3)); /* ".print_r($tmp, true)." */");
 	
 // $GLOBALS['unipath_debug'] = true;
 	$unipath = '/test1[a = 1]';
 	echo "<h3>--- $unipath ---</h3>";
 	$tmp = uni($unipath);
 	assert('count($tmp) == 2 /* '.print_r($tmp, true).' */');
-	_cursor_assertEqu(
-		array(
-			array('name' => "assertEqu('test_var_filter1b')", 'data' => $tmp)),
-			0, 'set',
-			array(0 => array('a' => 1), 1 => array('a' => 1, 'c' => 3))
-	);
+	assert("\$tmp = array(0 => array('a' => 1), 1 => array('a' => 1, 'c' => 3)); /* ".print_r($tmp, true)." */");
 // $GLOBALS['unipath_debug'] = false;
 
 	$unipath = 'test1[a = 0]/toArray()';
@@ -890,7 +966,15 @@ if(isset($_GET['test_uniPath'])) {
 	$unipath = '$_POST/file1/name/translit()';
 	echo "<h3>--- $unipath ---</h3>";
 	$_POST['file1'] = array('name' => 'РСВ-1 (2013 - 2 квартал)(001).ods');
-	uni($unipath.'/assertEqu()', 'RSV_1_2013___2_kvartal001.ods');
+	$result = uni($unipath);
+	assert('$result == "RSV-1_(2013_-_2_kvartal)(001).ods"; /* '.var_export($result,true).' */');
+	
+	$unipath = '$_POST/file1/tmp_name/untranslit()';
+	echo "<h3>--- $unipath ---</h3>";
+	$_POST['file1']['tmp_name'] = 'RSV-1_(2013-2_kvartal)_001.ods;%20';
+	$result = uni($unipath);
+	assert('$result == "РСВ-1 (2013-2 квартал) 001.одс;%20"; /* '.var_export($result,true).' */');
+
 
 	$_POST = array('abc' => 123);
 	
@@ -966,10 +1050,23 @@ if(isset($_GET['test_uniPath'])) {
 	assert('$result == array("abc" => 123); /* '.print_r($result, true).' */');
 // $GLOBALS['unipath_debug'] = false;
 
+	$unipath = 'cached($uncached_var1, array(1,2,3))/2';
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+	assert('$result == 3; /* '.print_r($result, true).' */');
+	assert('isset($GLOBALS["uncached_var1"]); /* '.print_r($GLOBALS['uncached_var1'], true).' */');
+	assert('$GLOBALS_data_types[\'uncached_var1\'] == "array"; /* '.@print_r($GLOBALS_data_types['uncached_var1'], true).' */');
+
+	$unipath = 'cached($uncached_var1)/1';
+	echo "<h3>--- $unipath ---</h3>";
+//$GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+	assert('$result == 2; /* '.print_r($result, true).' */');
+	
 	$unipath = '$_POST/cache($_post)';
 	echo "<h3>--- $unipath ---</h3>";
 //$GLOBALS['unipath_debug'] = true;
-// 	uni($unipath.'/assertEqu()', array('abc' => 123));
 	$result = uni($unipath);
 	assert('$result == array("abc" => 123); /* '.print_r($result, true).' */');
 	assert('isset($GLOBALS["_post"]); /* '.print_r($GLOBALS['_post'], true).' */'); 
@@ -978,8 +1075,9 @@ if(isset($_GET['test_uniPath'])) {
 	$unipath = 'cache($_post)';
 	echo "<h3>--- $unipath ---</h3>";
 //$GLOBALS['unipath_debug'] = true;
-	uni($unipath.'/assertEqu()', array('abc' => 123));
-
+	$result = uni($unipath);
+	assert("\$result = array('abc' => 123); /* ".print_r($result, true)." */");
+	
 	$unipath = "\$_POST/replace_in('<h1>abc</h1>
 	<h2>abc</h2>')";
 	echo "<h3>--- $unipath ---</h3>";
@@ -1058,13 +1156,15 @@ if(isset($_GET['test_uniPath'])) {
 		+table4[tbl1.id=table4.id]/order_by('tbl1.id')/columns(\"tbl1.*, tbl1.id as id1, tbl2.*, IFNULL(tbl1.name, '(null)') as name\")/asSQLQuery()";
 	echo "<h3>--- $unipath ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
-	uni($unipath.'/assertEqu()', array('query' => 'SELECT tbl1.*, tbl1.id as id1, tbl2.*, IFNULL(tbl1.name, \'(null)\') as name FROM table1 AS tbl1 LEFT JOIN table2 AS tbl2 ON tbl1.id = tbl2.id NATURAL JOIN table3 LEFT JOIN table4 ON tbl1.id = table4.id WHERE id = 1  ORDER BY tbl1.id', 'params' => array()));
+	$result = uni($unipath);
+	assert("\$result = array('query' => 'SELECT tbl1.*, tbl1.id as id1, tbl2.*, IFNULL(tbl1.name, \'(null)\') as name FROM table1 AS tbl1 LEFT JOIN table2 AS tbl2 ON tbl1.id = tbl2.id NATURAL JOIN table3 LEFT JOIN table4 ON tbl1.id = table4.id WHERE id = 1  ORDER BY tbl1.id', 'params' => array()); /* ".print_r($result, true)." */");
 // $GLOBALS['unipath_debug'] = false;
 
 	$unipath = "db1/ads_lifecycle_log[item_id = pbr_id and item_type = 34 and ads_lifecycle_log.date > `2015-10-00` and pbr_puid = 74112 and pbr_act = 1] + pb_realty + ads_pay_log[lifecycle_log_id = ads_lifecycle_log.id] + t_balance_log[balance_log_id = t_balance_log.id]/columns(`pbr_id, pbr_act, pbr_closedate, ads_lifecycle_log.id, action, ads_lifecycle_log.date, t_balance_log.value`)/order_by(`pbr_id, ads_lifecycle_log.date DESC`)/limit(100)/asSQLQuery()";
 	echo "<h3>--- $unipath ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
-	uni($unipath.'/assertEqu()', array('query' => 'SELECT pbr_id, pbr_act, pbr_closedate, ads_lifecycle_log.id, action, ads_lifecycle_log.date, t_balance_log.value FROM ads_lifecycle_log NATURAL JOIN pb_realty LEFT JOIN ads_pay_log ON lifecycle_log_id = ads_lifecycle_log.id LEFT JOIN t_balance_log ON balance_log_id = t_balance_log.id WHERE item_id = pbr_id and item_type = 34 and ads_lifecycle_log.date > \'2015-10-00\' and pbr_puid = 74112 and pbr_act = 1  ORDER BY pbr_id, ads_lifecycle_log.date DESC LIMIT 100', 'params' => array()));
+	$result = uni($unipath);
+	assert("\$result = array('query' => 'SELECT pbr_id, pbr_act, pbr_closedate, ads_lifecycle_log.id, action, ads_lifecycle_log.date, t_balance_log.value FROM ads_lifecycle_log NATURAL JOIN pb_realty LEFT JOIN ads_pay_log ON lifecycle_log_id = ads_lifecycle_log.id LEFT JOIN t_balance_log ON balance_log_id = t_balance_log.id WHERE item_id = pbr_id and item_type = 34 and ads_lifecycle_log.date > \'2015-10-00\' and pbr_puid = 74112 and pbr_act = 1  ORDER BY pbr_id, ads_lifecycle_log.date DESC LIMIT 100', 'params' => array()); /* ".print_r($result, true).' */');
 // $GLOBALS['unipath_debug'] = false;
 	
 	$unipath = "db1/table1[id = -123]/asSQLQuery()";
@@ -1091,7 +1191,7 @@ if(isset($_GET['test_uniPath'])) {
 	$sql = uni($unipath);
 	assert('$sql = "SELECT * FROM table1 WHERE val LIKE \'%123%\'"; /* '.print_r($sql, true).' */');
 	
-	$GLOBALS['db1']->exec("CREATE TABLE categories (
+	$GLOBALS['db1']->exec("CREATE TABLE tbl_categories (
         cat_id INTEGER PRIMARY KEY,
         cat_parent_id INTEGER NOT NULL DEFAULT 0,
         cat_name TEXT NOT NULL,
@@ -1103,8 +1203,8 @@ if(isset($_GET['test_uniPath'])) {
         cat_sort_order REAL NOT NULL DEFAULT 1000.0,
         cat_modified_stamp INTEGER,
         cat_data_json_encoded TEXT)");
-    $GLOBALS['db1']->exec("INSERT INTO categories (cat_id, cat_name, cat_code1c) VALUES (1, 'Category 1', 'CODE0000001')");
-    $unipath = "db1/categories[1]/all()";
+    $GLOBALS['db1']->exec("INSERT INTO tbl_categories (cat_id, cat_name, cat_code1c) VALUES (1, 'Category 1', 'CODE0000001')");
+    $unipath = "db1/tbl_categories[1]/all()";
 	echo "<h3>--- $unipath ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
 	$result = uni($unipath);
@@ -1124,7 +1224,7 @@ if(isset($_GET['test_uniPath'])) {
 // $GLOBALS['unipath_debug'] = false;
     
     //     $GLOBALS['db1']->exec("INSERT INTO categories (cat_id, cat_name, cat_code1c) VALUES (2, 'Category 2', 'CODE0000002')");
-    $unipath = "/db1/categories/new_row()";
+    $unipath = "/db1/tbl_categories/new_row()";
     echo "<h3>--- $unipath = array(2, 'Category 2', 'CODE0000002') ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
 	$result = uni($unipath, array(
@@ -1139,7 +1239,7 @@ if(isset($_GET['test_uniPath'])) {
 		'cat_modified_stamp' => NULL,
 		'cat_data_json_encoded' => NULL,
 	));
-    $result = $GLOBALS['db1']->query("SELECT * FROM categories WHERE cat_id = 2")->fetchAll(PDO::FETCH_ASSOC);
+    $result = $GLOBALS['db1']->query("SELECT * FROM tbl_categories WHERE cat_id = 2")->fetchAll(PDO::FETCH_ASSOC);
 assert("\$result == array(array(
 		'cat_id' => '2',
 		'cat_parent_id' => '0',
@@ -1155,9 +1255,9 @@ assert("\$result == array(array(
 	)); /* ".print_r($result, true).' */');
 // $GLOBALS['unipath_debug'] = false;
 
-	$GLOBALS['db1']->exec("UPDATE categories SET cat_code1c = 'CODE0000002' WHERE cat_id = 2");
+	$GLOBALS['db1']->exec("UPDATE tbl_categories SET cat_code1c = 'CODE0000002' WHERE cat_id = 2");
 
-    $unipath = "db1/categories[1]/all()";
+    $unipath = "db1/tbl_categories[1]/all()";
 	echo "<h3>--- $unipath ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
 	$result = uni($unipath);
@@ -1189,17 +1289,48 @@ assert("\$result == array(array(
 	)); /* ".print_r($result, true).' */');
 // $GLOBALS['unipath_debug'] = false;
 
+	$unipath = "/db1/tbl_categories[]";
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+	assert("\$result == array(array(
+		'cat_id' => '1',
+		'cat_parent_id' => '0',
+		'cat_name' => 'Category 1',
+		'cat_url' => NULL,
+		'cat_type' => NULL,
+		'cat_code1c' => 'CODE0000001',
+		'cat_deleted' => '0',
+		'cat_hidden' => '0',
+		'cat_sort_order' => '1000.0',
+		'cat_modified_stamp' => NULL,
+		'cat_data_json_encoded' => NULL,
+	),
+	array(
+		'cat_id' => '2',
+		'cat_parent_id' => '0',
+		'cat_name' => 'Category 2',
+		'cat_url' => NULL,
+		'cat_type' => NULL,
+		'cat_code1c' => 'CODE0000002',
+		'cat_deleted' => '0',
+		'cat_hidden' => '0',
+		'cat_sort_order' => '1000.0',
+		'cat_modified_stamp' => NULL,
+		'cat_data_json_encoded' => NULL,
+	)); /* ".var_export($result, true).' */');
+// $GLOBALS['unipath_debug'] = false;
 
-	$unipath = "/db1/categories[cat_id=2]/0/cat_code1c";
+	$unipath = "/db1/tbl_categories[cat_id=2]/0/cat_code1c";
 	echo "<h3>--- $unipath = '00000000002' ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
 	$result = __uni_with_start_data(null, null, null, $unipath, '00000000002');
-	$result = $GLOBALS['db1']->query("SELECT * FROM categories WHERE cat_id = 2")->fetchAll(PDO::FETCH_ASSOC);
-	assert('$result[0]["cat_code1c"] === "00000000002"; /* '.print_r($result[0]['cat_code1c'], true).' */');
+	$result = $GLOBALS['db1']->query("SELECT * FROM tbl_categories WHERE cat_id = 2")->fetchAll(PDO::FETCH_ASSOC);
+	assert('$result[0]["cat_code1c"] === "00000000002"; /* '.print_r($result[0], true).' */');
 // $GLOBALS['unipath_debug'] = false;
 
 
-	$unipath = "/db1/categories[cat_id=2]/0/cat_deleted";
+	$unipath = "/db1/tbl_categories[cat_id=2]/0/cat_deleted";
 	echo "<h3>--- $unipath ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
 	$result = __uni_with_start_data(null, null, null, $unipath);
@@ -1207,41 +1338,41 @@ assert("\$result == array(array(
 	assert('$result["data_type"] === "string"; /* '.print_r($result, true).' */');
 // $GLOBALS['unipath_debug'] = false;
 	
-	$unipath = "/db1/categories[1=1]/1/cat_deleted";
+	$unipath = "/db1/tbl_categories[1=1]/1/cat_deleted";
 	echo "<h3>--- $unipath = 1 ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
 	$GLOBALS['unipath_debug_sql'] = array();
 	uni($unipath, 1);
-	assert('$GLOBALS["unipath_debug_sql"] == array("SELECT * FROM categories WHERE 1 = 1", "UPDATE categories SET cat_deleted = 1 WHERE cat_id = \'2\' AND cat_parent_id = \'0\' AND cat_name = \'Category 2\' AND cat_code1c = \'00000000002\' AND cat_deleted = \'0\' AND cat_hidden = \'0\' AND cat_sort_order = \'1000.0\'"); /* '.print_r($GLOBALS["unipath_debug_sql"], true).' */');
+	assert('$GLOBALS["unipath_debug_sql"] == array("SELECT * FROM tbl_categories WHERE 1 = 1", "UPDATE tbl_categories SET cat_deleted = 1 WHERE cat_id = \'2\' AND cat_parent_id = \'0\' AND cat_name = \'Category 2\' AND cat_code1c = \'00000000002\' AND cat_deleted = \'0\' AND cat_hidden = \'0\' AND cat_sort_order = \'1000.0\'"); /* '.print_r($GLOBALS["unipath_debug_sql"], true).' */');
 	
-	$rows = $GLOBALS['db1']->query("SELECT cat_deleted FROM categories")->fetchAll(PDO::FETCH_ASSOC);
+	$rows = $GLOBALS['db1']->query("SELECT cat_deleted FROM tbl_categories")->fetchAll(PDO::FETCH_ASSOC);
 	assert('$rows == array(array("cat_deleted" => 0), array("cat_deleted" => 1)); /* '.print_r($rows, true).' */');
 	unset($GLOBALS['unipath_debug_sql']);
 // $GLOBALS['unipath_debug'] = false;
 
-	$unipath = "/db1/categories[cat_id=2]";
+	$unipath = "/db1/tbl_categories[cat_id=2]";
 	echo "<h3>--- $unipath = array('cat_deleted' => 2) ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
 	$GLOBALS['unipath_debug_sql'] = array();
 	uni($unipath, array('cat_deleted' => 2));
-	assert('$GLOBALS["unipath_debug_sql"] == array("UPDATE categories SET cat_deleted = 2 WHERE cat_id = 2"); /* '.print_r($GLOBALS["unipath_debug_sql"], true).' */');
+	assert('$GLOBALS["unipath_debug_sql"] == array("UPDATE tbl_categories SET cat_deleted = 2 WHERE cat_id = 2"); /* '.print_r($GLOBALS["unipath_debug_sql"], true).' */');
 	
-	$rows = $GLOBALS['db1']->query("SELECT cat_deleted FROM categories")->fetchAll(PDO::FETCH_ASSOC);
+	$rows = $GLOBALS['db1']->query("SELECT cat_deleted FROM tbl_categories")->fetchAll(PDO::FETCH_ASSOC);
 	assert('$rows == array(array("cat_deleted" => 0), array("cat_deleted" => 2)); /* '.print_r($rows, true).' */');
 	unset($GLOBALS['unipath_debug_sql']);
 // $GLOBALS['unipath_debug'] = false;
 
-	$GLOBALS['db1']->exec("CREATE TABLE categories_stat (
+	$GLOBALS['db1']->exec("CREATE TABLE tbl_categories_stat (
 		cat_id INTEGER PRIMARY KEY,
 		cat_stat TEXT
 	);");
 	
-	$unipath = "/db1/categories[cat_hidden=0]++categories_stat[categories_stat.cat_id=categories.cat_id]/asSQLQuery()";
+	$unipath = "/db1/tbl_categories[cat_hidden=0]++tbl_categories_stat[tbl_categories_stat.cat_id=tbl_categories.cat_id]/asSQLQuery()";
 	echo "<h3>--- $unipath ---</h3>";
 	$result = uni($unipath);
-	assert("\$result == array('query' => 'SELECT * FROM categories LEFT OUTER JOIN categories_stat ON categories_stat.cat_id = categories.cat_id WHERE cat_hidden = 0', 'params' => array()); /* ".print_r($result, true).' */');
+	assert("\$result == array('sql_query' => 'SELECT * FROM tbl_categories LEFT OUTER JOIN tbl_categories_stat ON tbl_categories_stat.cat_id = tbl_categories.cat_id WHERE cat_hidden = 0', 'sql_params' => array()); /* ".print_r($result, true).' */');
 	
-	$unipath = "/db1/categories[cat_hidden=0]++categories_stat[categories_stat.cat_id=categories.cat_id]/all()";
+	$unipath = "/db1/tbl_categories[cat_hidden=0]++tbl_categories_stat[tbl_categories_stat.cat_id=tbl_categories.cat_id]/all()";
 	echo "<h3>--- $unipath ---</h3>";
 	$result = uni($unipath);
 // var_export($result);
@@ -1274,12 +1405,52 @@ assert("\$result == array(array(
 		'cat_stat' => NULL,
 	)); /* ".print_r($result, true).' */');
 // $GLOBALS['unipath_debug'] = false;
-	
-	$unipath = "/db1/categories[1]/sql_result_cache(/tmp_rows_cache1)/cache(/db1_cats)";
+
+	$unipath = "/db1/sql_table_prefix(`tbl_`)/categories[cat_hidden=0 and like(categories.cat_name, 'C%')]++categories_stat[categories_stat.cat_id=categories.cat_id]/all()";
 	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+// var_export($result);
+	assert("\$result == array(array(
+		'cat_id' => NULL,
+		'cat_parent_id' => '0',
+		'cat_name' => 'Category 1',
+		'cat_url' => NULL,
+		'cat_type' => NULL,
+		'cat_code1c' => 'CODE0000001',
+		'cat_deleted' => '0',
+		'cat_hidden' => '0',
+		'cat_sort_order' => '1000.0',
+		'cat_modified_stamp' => NULL,
+		'cat_data_json_encoded' => NULL,
+		'cat_stat' => NULL,
+	),
+	array(
+		'cat_id' => NULL,
+		'cat_parent_id' => '0',
+		'cat_name' => 'Category 2',
+		'cat_url' => NULL,
+		'cat_type' => NULL,
+		'cat_code1c' => '00000000002',
+		'cat_deleted' => '2',
+		'cat_hidden' => '0',
+		'cat_sort_order' => '1000.0',
+		'cat_modified_stamp' => NULL,
+		'cat_data_json_encoded' => NULL,
+		'cat_stat' => NULL,
+	)); /* ".print_r($result, true).' */');
+// $GLOBALS['unipath_debug'] = false;
+
+	$unipath = "/db1/tbl_categories[1]/sql_result_cache(/tmp_rows_cache1)/cache(/db1_cats)";
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
 	uni($unipath);
+// $GLOBALS['unipath_debug'] = false;
 	assert("is_array(\$GLOBALS_data_tracking['db1_cats']); /* 	".print_r($GLOBALS_data_tracking['db1_cats'], true).' */');
-	assert("empty(\$GLOBALS['tmp_rows_cache1']); /* ".@print_r($GLOBALS['tmp_rows_cache1'], true).' */');
+	assert("is_null(\$GLOBALS_data_tracking['db1_cats']['stmt']); /* 	".print_r($GLOBALS_data_tracking['db1_cats'], true).' */');
+	// ???
+	assert("!empty(\$GLOBALS['tmp_rows_cache1']); /* ".@print_r($GLOBALS['tmp_rows_cache1'], true).' */');
+	
 	
 	$unipath = "/db1_cats/all()";
 	echo "<h3>--- $unipath ---</h3>";
@@ -1287,7 +1458,7 @@ assert("\$result == array(array(
 	$result = uni($unipath);
 	assert('count($result) == 2; /* '.print_r($result, true).' */');
 // print_r($GLOBALS_data_tracking['db1_cats']);
-	assert("count(\$GLOBALS_data_tracking['db1_cats']['cursor_vars']['stmt_result_rows']) == 2; /* ".print_r($GLOBALS_data_tracking['db1_cats']['cursor_vars'], true).' */');
+	assert("count(\$GLOBALS_data_tracking['db1_cats']['result_cache']) == 2; /* ".print_r($GLOBALS_data_tracking['db1_cats']['result_cache'], true).' */');
 	assert("\$GLOBALS['tmp_rows_cache1'] == array (
 	0 => 
 	array (
@@ -1339,7 +1510,26 @@ assert("\$result == array(array(
 	); /* ".print_r($result, true).' */');
 // $GLOBALS['unipath_debug'] = false;
 
-	$unipath = "/db1/categories[cat_id = 1]/toHash(`cat_code1c`, cat_name)";
+	$unipath = "/db1_cats/.[cat_id = 2]/0";
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+	assert("\$result == array(
+		'cat_id' => '2',
+		'cat_parent_id' => '0',
+		'cat_name' => 'Category 2',
+		'cat_url' => NULL,
+		'cat_type' => NULL,
+		'cat_code1c' => '00000000002',
+		'cat_deleted' => '2',
+		'cat_hidden' => '0',
+		'cat_sort_order' => '1000.0',
+		'cat_modified_stamp' => NULL,
+		'cat_data_json_encoded' => NULL,
+	); /* ".print_r($result, true).' */');
+// $GLOBALS['unipath_debug'] = false;
+
+	$unipath = "/db1/tbl_categories[cat_id = 1]/toHash(`cat_code1c`, cat_name)";
 	echo "<h3>--- $unipath ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
 	$result = uni($unipath);
@@ -1349,22 +1539,30 @@ assert("\$result == array(array(
 	$unipath = "\$_GET/test_list/split(';')/trim()/remove_empty()/regexp_replace('^~(\/.*)$', '<span class=\"obj_page-photo-wrp\"><img class=\"obj_page-photo-img\" src=\"$1\" alt=\"\" /></span>')/join(' ')";
 	echo "<h3>--- $unipath ---</h3><xmp>";
 //$GLOBALS['unipath_debug'] = true;
-	uni($unipath.'/assertEqu()', '<span class="obj_page-photo-wrp"><img class="obj_page-photo-img" src="/Media/Default/newbilding/gallery/фото-1.jpg" alt="" /></span> <span class="obj_page-photo-wrp"><img class="obj_page-photo-img" src="/Media/Default/newbilding/gallery/фото-2.jpg" alt="" /></span> <span class="obj_page-photo-wrp"><img class="obj_page-photo-img" src="/Media/Default/newbilding/gallery/фото-3.jpg" alt="" /></span>');
+	$result = uni($unipath);
+	assert('$result == \'<span class="obj_page-photo-wrp"><img class="obj_page-photo-img" src="/Media/Default/newbilding/gallery/фото-1.jpg" alt="" /></span> <span class="obj_page-photo-wrp"><img class="obj_page-photo-img" src="/Media/Default/newbilding/gallery/фото-2.jpg" alt="" /></span> <span class="obj_page-photo-wrp"><img class="obj_page-photo-img" src="/Media/Default/newbilding/gallery/фото-3.jpg" alt="" /></span>\'; /* '.print_r($result, true).' */');
 	echo "</xmp>";
 	
-	$unipath = "/db1/categories[1]/sql_result_cache(/tmp_rows_cache1)";
+	$unipath = "/db1/tbl_categories[1]/sql_result_cache(/tmp_rows_cache1)";
 	echo "<h3>--- new Uni($unipath) ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
 	$result = new Uni($unipath);
 	assert('get_class($result) == "Uni"; /* '.print_r(get_class($result), true).' */');
 	assert('empty($GLOBALS["tmp_rows_cache1"]); /* '.@print_r($GLOBALS["tmp_rows_cache1"], true).' */');
 	
+	echo "<h3>--- \$uni->rewind() ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
 	$result_rewind = $result->rewind();
-	assert("!empty(\$result_rewind); /* ".print_r($result_rewind, true).' */');
-	
+	assert("!empty(\$result_rewind); /* ".var_export($result_rewind, true).' */');
+// $GLOBALS['unipath_debug'] = false;
+
+	echo "<h3>--- \$uni->valid() ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
 	$result_valid = $result->valid();
-	assert("\$result_valid == true; /* ".print_r($result_valid, true).' */');
+// $GLOBALS['unipath_debug'] = false;
+	assert("\$result_valid == true; /* ".var_export($result_valid, true).' */');
 	
+	echo "<h3>--- \$uni->current() ---</h3>";
 	$result_current = $result->current();
 	assert("\$result_current->data == array(
 		'cat_id' => '1',
@@ -1380,9 +1578,11 @@ assert("\$result == array(array(
 		'cat_data_json_encoded' => NULL,
 	); /* ".print_r($result_current->data, true).' */');
 	
+	echo "<h3>--- \$uni->key() ---</h3>";
 	$result_key = $result->key();
 	assert("\$result_key === 0; /* ".print_r($result_key, true).' */');
 	
+	echo "<h3>--- \$uni->next() ---</h3>";
 	$result_next = $result->next();
 	assert("\$result_next->data == array(
 		'cat_id' => '2',
@@ -1398,9 +1598,11 @@ assert("\$result == array(array(
 		'cat_data_json_encoded' => NULL,
 	); /* ".var_export($result_next->data, true).' */');
 	
+	echo "<h3>--- \$uni->valid() ---</h3>";
 	$result_valid = $result->valid();
-	assert("\$result_valid == true; /* ".print_r($result_valid, true).' */');
+	assert("\$result_valid == true; /* ".var_export($result_valid, true).' */');
 	
+	echo "<h3>--- \$uni->current() ---</h3>";
 	$result_current = $result->current();
 	assert("\$result_current->data == array(
 		'cat_id' => '2',
@@ -1426,7 +1628,7 @@ assert("\$result == array(array(
 // 	$GLOBALS['unipath_debug'] = false;
 	
 	$result_current = $result->current();
-	assert("\$result_current == null /* ".print_r($result_current, true).' */');
+	assert("\$result_current == null /* ".var_export($result_current, true).' */');
 	
 	$result_key = $result->key();
 	assert("\$result_key === null; /* ".var_export($result_key, true).' */');
@@ -1476,6 +1678,30 @@ assert("\$result == array(array(
 		}
 	}
 	assert('$key0_found == true and $key1_found == true; /* '.var_export(array('key0_found' => $key0_found, 'key1_found' => $key1_found), true).' */');
+
+	$unipath = "/db1/tbl_categories[]/first()/if([cat_id = 2], `cat_id == 2`, `cat_id != 2`)";
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+	assert('$result == "cat_id != 2"; /* '.print_r($result, true).' */');
+// $GLOBALS['unipath_debug'] = false;
+	
+	$unipath = "/db1/tbl_categories[cat_parent_id=0 and like(`cat_name`, `Category 1`)]/delete()";
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+	$rows = $GLOBALS['db1']->query("SELECT cat_id FROM tbl_categories")->fetchAll(PDO::FETCH_ASSOC);
+	assert('$rows == array(array("cat_id" => 2)); /* '.print_r($rows, true).' */');
+// 	assert('$result == "cat_id != 2"; /* '.print_r($result, true).' */');
+// // $GLOBALS['unipath_debug'] = false;
+
+	$unipath = "/db1/tbl_categories[like(`cat_name`, `Category 2`)]/delete()";
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+	$rows = $GLOBALS['db1']->query("SELECT cat_id FROM tbl_categories")->fetchAll(PDO::FETCH_ASSOC);
+	assert('$rows == array(); /* '.print_r($rows, true).' */');
+// // $GLOBALS['unipath_debug'] = false;
 	
 	$unipath = "/_GET/split(';')";
 	echo "<h3>--- $unipath ---</h3>";
@@ -1516,7 +1742,11 @@ assert("\$result == array(array(
 	$unipath = "db1/table1[id=1]/columns(chunked(table1.Data, 10000, 3000), `table1.Id AS id1, table1.ContentType_id, REPLACE('abcd)asd', ')', '(')`)/asSQLQuery()";
 	echo "<h3>--- $unipath ---</h3>";
 // $GLOBALS['unipath_debug'] = true;
-	uni($unipath.'/assertEqu()', array('query' => "SELECT SUBSTRING(table1.Data, 1, 3000) AS uni_chunk_0_table1_Data, SUBSTRING(table1.Data, 3001, 3000) AS uni_chunk_1_table1_Data, SUBSTRING(table1.Data, 6001, 3000) AS uni_chunk_2_table1_Data, SUBSTRING(table1.Data, 9001, 3000) AS uni_chunk_3_table1_Data, table1.Id AS id1, table1.ContentType_id, REPLACE('abcd)asd', ')', '(') FROM table1 WHERE id = 1", 'binds' => array()));
+// $GLOBALS['unipath_debug_parse'] = true;
+	$result = uni($unipath);
+	assert("\$result = array('sql_query' => \"SELECT SUBSTRING(table1.Data, 1, 3000) AS uni_chunk_0_table1_Data, SUBSTRING(table1.Data, 3001, 3000) AS uni_chunk_1_table1_Data, SUBSTRING(table1.Data, 6001, 3000) AS uni_chunk_2_table1_Data, SUBSTRING(table1.Data, 9001, 3000) AS uni_chunk_3_table1_Data, table1.Id AS id1, table1.ContentType_id, REPLACE('abcd)asd', ')', '(') FROM table1 WHERE id = 1\", 'sql_binds' => array()); /* ".print_r($result, true).' */');
+// $GLOBALS['unipath_debug'] = false;
+// $GLOBALS['unipath_debug_parse'] = false;
 	
 	$_POST['site_map'] = array('Недвижимость' => array(
 	'premium' => array('title' => 'Элитная недвижимость'),
@@ -1565,7 +1795,8 @@ assert("\$result == array(array(
 	$unipath = "/db1/default_Orchard_Framework_ContentItemRecord[ContentType_id=11,14 and Published=1 and (like(Data, N'%abc%') or ContentItemRecord_id = 'abc' or like(Title, N'%abc%'))]/asSQLQuery()";
 	echo "<h3>--- $unipath ---</h3>";
 //$GLOBALS['unipath_debug'] = true;
-	uni($unipath.'/assertEqu()', array('query' => "SELECT * FROM default_Orchard_Framework_ContentItemRecord WHERE ContentType_id IN (11,14) and Published = 1 and (Data LIKE N'%abc%' or ContentItemRecord_id = 'abc' or Title LIKE N'%abc%')", 'params' => array()));
+	$result = uni($unipath);
+	assert("\$result == array('sql_query' => \"SELECT * FROM default_Orchard_Framework_ContentItemRecord WHERE ContentType_id IN (11,14) and Published = 1 and (Data LIKE N'%abc%' or ContentItemRecord_id = 'abc' or Title LIKE N'%abc%')\", 'sql_params' => array()); /* ".print_r($result, true)." */");
 	
 	$search_query = 'abc123';
 	$unipath = "/db1/objects_for_admin[obj_deleted = 0 and (ilike(title, '%{$search_query}%') or ilike(url, '%{$search_query}%') or ilike(city_part, '%{$search_query}%') or ilike(street, '%{$search_query}%'))]/asSQLQuery()";
@@ -1929,9 +2160,15 @@ echo '</xmp>';
 	$unipath = 'array1/ArrayToXML()';
 	echo "<h3>--- $unipath ---</h3><xmp>";
 	$result = uni($unipath);
-	assert('$result == "<xml><aaa>111</aaa><bbb>222</bbb><ccc>333</ccc></xml>"; /* '.print_r($array1, true).' */');
+	assert('$result == "<xml><aaa>111</aaa><bbb>222</bbb><ccc>333</ccc></xml>"; /* '.print_r($result, true).' */');
 	echo '</xmp>';
 
+	$unipath = '/php:get_declared_classes()/0';
+	echo "<h3>--- $unipath ---</h3>";
+// 	$GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+	assert('$result == "stdClass"; /* '.print_r($result, true).' */');
+// 	$GLOBALS['unipath_debug'] = false;
 }
 
 if(isset($_GET['test_uniExtensions'])) {

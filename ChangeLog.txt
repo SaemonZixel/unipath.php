@@ -1,3 +1,16 @@
+2016-07-12  Saemon Zixel  <saemonzixel@gmail.com>
+	
+	* version 2.2-dev
+	* now uni() return array() and Uni[] return object
+	* SQL: sql_table_prefix(), delete(), new() alias of new_row()
+	* php:<func_name>() a new type of function call with manually specifying the arguments
+	* Uni::<uni_func>() now accept many arguments
+	* /[...]/ pass or not to pass
+	* cached(var_name, unipath_to_cache) - new style of function cache()
+	* if(<unipath>, <if_true>, <if_false>), regexp(), wrap() - can accept right as second argument, translit() - now invertible, untranslit() - invert translit() result, sprintf(), sprintf1()
+	* globalize some common variables
+	* some bugfixes and new bugs
+
 2016-05-09  Saemon Zixel  <saemonzixel@gmail.com>
 
 	* version 2.1-dev

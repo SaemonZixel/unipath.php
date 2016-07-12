@@ -3,7 +3,7 @@
 /**
  *  UniPath - XPath like access to DataBase, Files, XML, Arrays and any other data from PHP
  *  
- *  @version: 2.1-dev
+ *  @version: 2.2-dev
  *  @author: Saemon Zixel (saemon-zixel.ru) on 2013-2016 year
  *
  *	UniversalPath (UniPath.php) - универсальный доступ к любым ресурсам
@@ -28,15 +28,21 @@
 global $GLOBALS_data_types, $GLOBALS_data_tracking, $GLOBALS_data_timestamp, 
        $__uni_prt_cnt, $__uni_benchmark, $__uni_optimize; // for PHP 5.3 and upper
 
+// для удобства сделаем часто используемые переменные глобальными (стоит ли?)
+global $i, $key, $val, $value, $row, $rows, $item, $items, $list, $data, $tmp, $temp;
+global $fp, $dbh, $html, $page, $news, $post, $article, $content, $name;
+
 $GLOBALS_data_types = array(); // unipath-типы некоторых переменных в $GLOBALS
 $GLOBALS_data_tracking = array(); // источники некоторых переменных в $GLOBALS
 $GLOBALS_data_timestamp = array(); // timestamp если были закешированны
 
-$__uni_prt_cnt = 100000; // лимит интереций циклов, защитный счётчик от бесконечного зацикливания
-$__uni_optimize = 1; // 0 - off; 1 - optimeze: /abc, ./abc, ./`abc`
+$__unipath_php_file = __FILE__; // кто и где мы
+
+$__uni_prt_cnt = 100000; // лимит интераций циклов, защитный счётчик от бесконечного зацикливания
+$__uni_optimize = 1; // 0 - off; 1 - optimeze: /abc, ./abc, ./`abc`, .
 $__uni_benchmark = array(); // для статистики скорости обработки unipath запросов
 
-// режим присвоения значения
+// режим присвоения значения (исключительно для внутренних нужд)
 $__uni_assign_mode = false;
 
 function uni($unipath) {
@@ -50,22 +56,57 @@ function uni($unipath) {
 	
 // if(!isset($uni_result['data'])) var_dump("!!!", $uni_result);
 
-	// cursor() - оборачиваем в объект Uni потому, что неизвестно нужен ли будет результат дальше
+	// cursor() - вытаскиваем все данные тогда
 	if(isset($uni_result['data_tracking']) and isset($uni_result['data_tracking']['cursor()'])) {
-		/*$call_result = call_user_func($uni_result['data_tracking']['cursor()'], array($uni_result), 0, 'all');
+if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni: Start all()...");
+		
+		$lv = 0;
+		$tree = array($uni_result);
+		
+		// REWIND - сначало перемотаем в начало
+		// _cursor_database + array/db-row -> вернёт false, т.к. в data уже находятся конечные данные
+		$call_result = call_user_func_array($uni_result['data_tracking']["cursor()"], array(&$tree, 0, 'rewind'));
+		
+		// если перемоталось успешно, то начинаем запрашивать данные
+		if($call_result) {
+			$result = array();
+		
+			// вытащим все данные
+			global $__uni_prt_cnt;
+			for($prt_cnt = 0; $prt_cnt < $__uni_prt_cnt; $prt_cnt++) {
+
+				// NEXT
+				$call_result = call_user_func_array($uni_result['data_tracking']['cursor()'], array(&$tree, 0, 'next', $__uni_prt_cnt));
+if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni: next - ", $call_result);
+				// если ответ - это одна запись, то преобразуем в массив с одной записью
+				if(is_array($call_result) and isset($call_result['data'], $call_result['data_type'])) 
+					$result[] = $call_result['data'];
+				
+				// если ответ это набор записей next(NNN)
+				elseif(is_array($call_result) and !empty($call_result)) {
+					unset($call_result['data_type'], $call_result['data_tracking']);
+					if(empty($result))
+						$result = $call_result;
+					else
+						$result = array_merge($result, $call_result);
+if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni: new \$result = ", $result);
+				} 
+				
+				// в случии с пустым массивом или false - делать нечего, заканчиваем обработку
+				else
+					break;
+			}
 			
-		// промежуточные переменные курсора перенесём в наш data_tracking
-		if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-			$uni_result['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-			unset($call_result['cursor_vars']);
-		}*/
+			// все данные вытащены, возвращаем их
+			return $result;
+		}
 		
 		// если данных нет, а тип данных ненулевой, то оборачиваем курсор в объект
-		if(!isset($uni_result['data']) and !in_array($uni_result['data_type'], array('null', 'NULL')))
+		/*if(!isset($uni_result['data']) and !in_array($uni_result['data_type'], array('null', 'NULL')))
 			return new Uni($uni_result['data'], $uni_result['data_type'], $uni_result['data_tracking']);
 			
 		// иначе возращаем скалярное 
-		else
+		else */
 			return $uni_result['data'];
 	}
 			
@@ -75,7 +116,7 @@ function uni($unipath) {
 // тот-же uni(), но с указанием стартовых данных
 // $data_tracking = array('pos()' => 1, 'key()' => 1, ...)
 function __uni_with_start_data($data, $data_type, $data_tracking, $unipath) {
-	
+
 	if(empty($unipath) and $unipath !== 0) {
 		$stacktrace = debug_backtrace();
 		trigger_error('UniPath: unipath is empty! ('.$stacktrace[1]['function'].')', E_USER_NOTICE);
@@ -235,12 +276,6 @@ function __uni_with_start_data($data, $data_type, $data_tracking, $unipath) {
 		if(isset($tree_node['data_tracking']) and isset($tree_node['data_tracking']['cursor()'])) {
 			$call_result = call_user_func($tree_node['data_tracking']['cursor()'], $tree, $lv, 'all');
 			
-			// промежуточные переменные курсора перенесём в наш data_tracking
-			if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-				$tree[$lv]['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-				unset($call_result['cursor_vars']);
-			}
-			
 			$tree[$lv]['data'] = $call_result['data'];
 			$tree[$lv]['data_type'] = $call_result['data_type'];
 			if(isset($call_result['data_tracking']))
@@ -259,28 +294,22 @@ function __uni_with_start_data($data, $data_type, $data_tracking, $unipath) {
 	return $tree_node;
 }
 
-function __uni_cursor($data, $data_type, &$data_tracking, $cursor_cmd = 'next', $cursor_arg1 = null) {
-	assert('is_array($data_tracking);');
+/*function __uni_cursor($data, $data_type, &$data_tracking, $cursor_cmd = 'next', $cursor_arg1 = null) {
+	assert('is_array($data_tracking);') or debug_print_backtrace();
 	assert('isset($data_tracking["cursor()"]);');
 		
-	$call_result = call_user_func(
-		$data_tracking["cursor()"], 
+	$call_result = call_user_func_array(
+		$data_tracking["cursor()"], array(
 		array(array(
 			'data' => $data,
 			'data_type' => $data_type,
 			'data_tracking' => $data_tracking,
 			'unipath' => "__uni_cursor($cursor_cmd)"
 		)), 
-		0, $cursor_cmd, $cursor_arg1);
+		0, $cursor_cmd, $cursor_arg1));
 			
-	// промежуточные переменные курсора перенесём в наш data_tracking
-	if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-		$data_tracking['cursor_vars'] = $call_result['cursor_vars'];
-		unset($call_result['cursor_vars']);
-	}
-	
 	return $call_result;
-}
+}*/
 
 class Uni extends ArrayIterator {
 	public $tree; // разобранная и выполненое дерево текущего unipath
@@ -332,23 +361,16 @@ class Uni extends ArrayIterator {
 			unset($this->current_cursor_result);
 
 			// теперь перемотаем в начало
-			$call_result = call_user_func(
-				$this->data_tracking['cursor()'], 
-				array(array(
-					'data' => & $this->data,
-					'data_type' => & $this->data_type,
-					'data_tracking' => & $this->data_tracking,
-					'unipath' => $this->unipath
-				)), 
-				0, 'rewind');
+			/*$tree_node = array(
+				'data' => & $this->data,
+				'data_type' => & $this->data_type,
+				'data_tracking' => & $this->data_tracking,
+				'unipath' => $this->unipath
+			);	*/		
+			$call_result = call_user_func_array($this->data_tracking['cursor()'], 
+				array(&$this->tree, count($this->tree)-1, 'rewind'));
 			
-			// промежуточные переменные курсора перенесём в наш data_tracking
-			if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-				$this->data_tracking['cursor_vars'] = $call_result['cursor_vars'];
-				unset($call_result['cursor_vars']);
-			}
-			
-			return $call_result[0];
+			return $call_result;
 		}
 		
 		// normal data
@@ -399,21 +421,14 @@ class Uni extends ArrayIterator {
 		// cursor()
 		if(isset($this->data_tracking['cursor()'])) {
 
-			$call_result = call_user_func(
-				$this->data_tracking['cursor()'], 
-				array(array(
-					'data' => & $this->data,
-					'data_type' => & $this->data_type,
-					'data_tracking' => & $this->data_tracking,
-					'unipath' => $this->unipath
-				)), 
-				0, 'next');
-			
-			// промежуточные переменные курсора перенесём в data_tracking
-			if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-				$this->data_tracking['cursor_vars'] = $call_result['cursor_vars'];
-				unset($call_result['cursor_vars']);
-			}
+			/* $tree_node = array(
+				'data' => & $this->data,
+				'data_type' => & $this->data_type,
+				'data_tracking' => & $this->data_tracking,
+				'unipath' => $this->unipath
+			); */
+			$call_result = call_user_func_array($this->data_tracking['cursor()'], 
+				array(&$this->tree, count($this->tree)-1, 'next'));
 			
 			$this->current_cursor_result = empty($call_result) ? null : $call_result;
 			
@@ -501,11 +516,43 @@ class Uni extends ArrayIterator {
 			trigger_error('Uni: '.__FUNCTION__.": _uni_{$uni_func_name} does not exist!", E_USER_ERROR);
 			return null;
 		}
+
+		// если один аргумент, то всё просто
+		$tree = array(
+			array('name' => '?start_data?', 
+				  'data' => $arguments[0], 
+				  'data_type' => gettype($arguments[0])), 
+			array('name' => $uni_func_name.'()', 
+				  'data' => null));
 		
-		$result = call_user_func("_uni_{$uni_func_name}", array(
-			array('name' => '?start_data?', 'data' => $arguments[0], 'data_type' => gettype($arguments[0])), 
-			array('name' => $uni_func_name.'()', 'data' => null)), 
-		1);
+	
+		// если несколько, то надо их передать через $GLOBALS
+		if(count($arguments) > 1) {
+			$tree[1]['name'] = array();
+			
+			for($i = 1; $i < count($arguments); $i++) {
+				switch(gettype($arguments[$i])) {
+					case 'string':
+						$tree[1]['name'][] = "```$arguments[$i]```";
+						break;
+					case 'number':
+						$tree[1]['name'][] = $arguments[$i];
+						break;
+					default:
+						for($tmp_num = 1; $tmp_num < 10000; $tmp_num++) {
+							if(isset($GLOBALS["unipath_tmp_var$tmp_num"])) continue;
+							
+							$GLOBALS["unipath_tmp_var$tmp_num"] = $arguments[$i];
+							$tree[1]['name'][] = "/unipath_tmp_var$tmp_num";
+							break;
+						}
+				}
+			}
+					
+			$tree[1]['name'] = $uni_func_name.'('.implode(', ', $tree[1]['name']).')';
+		}
+
+		$result = call_user_func("_uni_{$uni_func_name}", $tree, 1);
 	
 		return isset($result['data']) ? $result['data'] : null;
 	}
@@ -516,23 +563,27 @@ function __uni_evalUniPath($tree) {
 	global $GLOBALS_data_types, $GLOBALS_data_tracking, $GLOBALS_data_timestamp;
 
 if(!empty($GLOBALS['unipath_debug'])) echo "\n**** ".$tree[count($tree)-1]['unipath']." ****\n";
+
+	if(count($tree) > 100)
+		trigger_error('UniPath.__uni_evalUniPath: Too many steps! - '.count($tree), E_USER_ERROR);
+
 	for($lv = 1; $lv < count($tree); $lv++) {
 		$name = isset($tree[$lv]['name']) ? strval($tree[$lv]['name']) : '';
 		$filter = empty($tree[$lv]['filter']) ? array() : $tree[$lv]['filter'];
 		$prev_data_type = $lv > 0 && isset($tree[$lv-1]['data_type']) ? $tree[$lv-1]['data_type'] : '';
 
-if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$lv], true);
+if(!empty($GLOBALS['unipath_debug'])) { 
+	echo "<br>--- $lv ---<br>";
+	if(isset($tree[$lv]['data']) and $tree[$lv]['data'] == $GLOBALS) 
+		print_r(array_merge($tree[$lv], array('data' => '*** $GLOBALS ***')));
+	else
+		print_r($tree[$lv], true);
+}
 
 		// *** cursor() ***
 		if($lv > 0 and isset($tree[$lv-1]['data_tracking'], $tree[$lv-1]['data_tracking']['cursor()'])) {
-			$call_result = call_user_func($tree[$lv-1]['data_tracking']['cursor()'], $tree, $lv-1, 'eval', $tree[$lv]);
+			$call_result = call_user_func_array($tree[$lv-1]['data_tracking']['cursor()'], array(&$tree, $lv-1, 'eval', $tree[$lv]));
 
-			// промежуточные переменные курсора перенесём в наш data_tracking
-			if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-				$tree[$lv-1]['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-				unset($call_result['cursor_vars']);
-			}
-			
 			// если ответ пришёл нормальный, то переходем к следующему узлу
 			if(is_array($call_result)) {
 				$tree[$lv] = array_merge($tree[$lv], $call_result);
@@ -551,8 +602,8 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 // 			var_dump('absolute path start...'); 
 		}*/
 
-		// если начинается с названия класса
-		if($lv == 1 and is_string($name) and class_exists($name)) {
+		// /Class/... если начинается с названия класса
+		if($lv == 1 and is_string($name) and class_exists($name) and ! array_key_exists($name, $GLOBALS)) {
 			$tree[$lv]['data'] = $name;
 			$tree[$lv]['data_type'] = 'class';
 			$tree[$lv]['data_tracking'] = array('key()' => $name);
@@ -563,10 +614,24 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 			and in_array($prev_data_type, array('object/PDO', 'resource/odbc-link', 'resource/mysql-link')) 
 			and strpos($name, 'last_error(') === false
 			and strpos($name, 'last_affected_rows(') === false
-			and strpos($name, 'last_insert_id(') === false) {
+			and strpos($name, 'last_insert_id(') === false
+			and strpos($name, 'sql_table_prefix(') === false) {
 			
 				$db = $tree[$lv-1]['data'];
 				$data_tracking = array('where' => array(), 'tables' => array());
+				$table_prefix = isset($tree[$lv-1]['data_tracking']['table_prefix']) ? $tree[$lv-1]['data_tracking']['table_prefix'] : '';
+
+				// создадим сразу карту алиасов-таблиц
+				for($i = 0; $i < 10; $i++) {
+					$suffix = $i ? "_$i" : "";
+					if(isset($tree[$lv]["name$suffix"]) == false) break;
+					if(strlen($tree[$lv]["name$suffix"]) >= 6 and substr_compare($tree[$lv]["name$suffix"], 'alias(', 0, 6, true) === 0) {
+						list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]["name$suffix"]);
+						$data_tracking['tables'][$args[1]] = $table_prefix.$args[0];
+					} 
+					else
+						$data_tracking['tables'][$table_prefix.$tree[$lv]["name$suffix"]] = $table_prefix.$tree[$lv]["name$suffix"];
+				}
 				
 				// FROM ... LEFT JOIN ... WHERE ...
 				$sql_join = "";
@@ -610,17 +675,36 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 								$filter[$expr]['left_sql'] = $filter[$filter[$expr]['left']]['sql'];
 								break;
 							case 'function':
-								if(substr_compare($filter[$expr]['left'], 'like(', 0, 5, true) == 0) {
-									$filter[$expr]['left_sql'] = preg_replace("~like\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 LIKE $2'$3'", $filter[$expr]['left']);
-								} elseif(substr_compare($filter[$expr]['left'], 'ilike(', 0, 6, true) == 0) {
-									$filter[$expr]['left_sql'] = preg_replace("~ilike\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 ILIKE $2'$3'", $filter[$expr]['left']);
-								} elseif(substr_compare($filter[$expr]['left'], 'like2(', 0, 5, true) == 0) {
+								if(in_array(strpos(strtoupper($filter[$expr]['left']), 'LIKE('), array(0,1))) {
+									list($args, $args_types) = __uni_parseFuncArgs($filter[$expr]['left']);
+									$filter[$expr]['left_sql'] = $args[0].
+										(strtoupper($filter[$expr]['left'][0]) == 'I' ? " ILIKE " : " LIKE ").
+										($args_types[1] == 'string-with-N' ? 'N' : '').
+										"'{$args[1]}'";
+										
+									// незабываем про префикс таблицы
+									if(!empty($table_prefix) 
+										and ($dot_pos = strpos($args[0], "."))
+										and array_key_exists($table_prefix.substr($args[0], 0, $dot_pos), $data_tracking['tables']))
+										$filter[$expr]['left_sql'] = $table_prefix.$filter[$expr]['left_sql'];
+								} 
+								// кастыль для MS SQL Server
+								elseif(substr_compare($filter[$expr]['left'], 'like2(', 0, 5, true) == 0) {
 									$filter[$expr]['left_sql'] = iconv('UTF-8', 'WINDOWS-1251', preg_replace("~like2\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 LIKE $2'$3'", $filter[$expr]['left']));
 								} else
 									$filter[$expr]['left_sql'] = $filter[$expr]['left'];
 								break;
+								
+							// поле таблицы
 							case 'name':
-								$filter[$expr]['left_sql'] = $filter[$expr]['left'];
+								// добавить ли префикс таблицы?
+								if(!empty($table_prefix) 
+									and ($dot_pos = strpos($filter[$expr]['left'], "."))
+									and array_key_exists($table_prefix.substr($filter[$expr]['left'], 0, $dot_pos), $data_tracking['tables'])
+									) {
+									$filter[$expr]['left_sql'] = $table_prefix.$filter[$expr]['left'];
+								} else
+									$filter[$expr]['left_sql'] = $filter[$expr]['left'];
 								break;
 						}
 						
@@ -675,23 +759,39 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 								$filter[$expr]['right_sql'] = $filter[$filter[$expr]['right']]['sql'];
 								break;
 							case 'function':
-								if(substr_compare($filter[$expr]['right'], 'like', 0, 4, true) == 0) {
-									$filter[$expr]['right_sql'] = preg_replace("~like2?\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 LIKE $2'$3'", $filter[$expr]['right']);
-								} elseif(substr_compare($filter[$expr]['right'], 'ilike(', 0, 6, true) == 0) {
-									$filter[$expr]['right_sql'] = preg_replace("~ilike\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 ILIKE $2'$3'", $filter[$expr]['right']);
-								} elseif(substr_compare($filter[$expr]['right'], 'sql_query(', 0, 10, true) == 0) {
+								if(in_array(strpos(strtoupper($filter[$expr]['right']), 'LIKE('), array(0,1))) {
+									list($args, $args_types) = __uni_parseFuncArgs($filter[$expr]['right']);
+									$filter[$expr]['right_sql'] = $args[0].
+										(strtoupper($filter[$expr]['right'][0]) == 'I' ? " ILIKE " : " LIKE ").
+										($args_types[1] == 'string-with-N' ? 'N' : '').
+										"'{$args[1]}'";
+										
+									// незабываем про префикс таблицы
+									if(!empty($table_prefix) 
+										and ($dot_pos = strpos($args[0], "."))
+										and array_key_exists($table_prefix.substr($args[0], 0, $dot_pos), $data_tracking['tables']))
+										$filter[$expr]['right_sql'] = $table_prefix.$filter[$expr]['right_sql'];
+								} 
+								elseif(substr_compare($filter[$expr]['right'], 'sql_query(', 0, 10, true) == 0) {
 									list($args, $args_types) = __uni_parseFuncArgs($filter[$expr]['right']);
 									$filter[$expr]['right_sql'] = '('.$args[0].')';
 									$filter[$expr]['op'] = 'IN';
-								} else/*if(substr_compare($filter[$expr]['right'], 'like2(', 0, 5, true) == 0) {
+								} 
+								// кастыль для MS SQL Server
+								elseif(substr_compare($filter[$expr]['right'], 'like2(', 0, 5, true) == 0) {
 									$filter[$expr]['right_sql'] = iconv('UTF-8', 'WINDOWS-1251', preg_replace("~like2\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 LIKE $2'$3'", $filter[$expr]['right']));
-								} else*/
+								} else
 									$filter[$expr]['right_sql'] = $filter[$expr]['right'];
 								break;
 							case 'name':
 								if(in_array($filter[$expr]['right'], array('NULL', 'Null', 'null'))) {
 									$filter[$expr]['right_sql'] = 'NULL';
 									$filter[$expr]['op'] = $filter[$expr]['op'] == '=' ? 'IS' : 'IS NOT';
+								} elseif(!empty($table_prefix) // добавить ли префикс таблицы?
+									and ($dot_pos = strpos($filter[$expr]['right'], "."))
+									and array_key_exists($table_prefix.substr($filter[$expr]['right'], 0, $dot_pos), $data_tracking['tables'])
+									) {
+									$filter[$expr]['right_sql'] = $table_prefix.$filter[$expr]['right'];
 								} else
 									$filter[$expr]['right_sql'] = $filter[$expr]['right'];
 								break;
@@ -717,7 +817,7 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 											$filter[$expr]['right_sql'][] = $db->quote($val);
 											break;
 										case 'resource/mysql-link':
-											$filter[$expr]['right_sql'] = "'".mysql_real_escape_string($value)."'";
+											$filter[$expr]['right_sql'][] = "'".mysql_real_escape_string($val)."'";
 											break;
 										case 'resource/odbc-link':
 										default:
@@ -755,42 +855,29 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 								) {
 									$data_tracking['where'][$filter[$expr]['left']] = $filter[$expr]['op'].' '.$filter[$expr]['right_sql'];
 							}
+							// ...фильтр по LIKE
+							if(isset($filter[$expr]['right_sql']) and (strpos($filter[$expr]['right_sql'], ' LIKE ') != false or strpos($filter[$expr]['right_sql'], ' ILIKE ') != false))
+								$data_tracking['where']["-- $expr\n"] = $filter[$expr]['right_sql'];
+							if(isset($filter[$expr]['left_sql']) and (strpos($filter[$expr]['left_sql'], ' LIKE ') != false or strpos($filter[$expr]['left_sql'], ' ILIKE ') != false))
+								$data_tracking['where']["-- $expr\n"] = $filter[$expr]['left_sql'];
 						}
 						
 						// next
 						$last_expr = $expr;
 						$expr = empty($filter[$expr]['next']) ? false : $filter[$expr]['next'];
 					}
-					
+
 					// alias()
 					if(strlen($tree[$lv]["name$suffix"]) >= 6 and substr_compare($tree[$lv]["name$suffix"], 'alias(', 0, 6, true) === 0) {
 						list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]["name$suffix"]);
-						$tbl_name = $args[0].' AS '.$args[1];
-/*						$tbl_name = rtrim(substr($tree[$lv]["name$suffix"], 6), "'\") ");
-						$commar_pos = strrpos($tbl_name, ',');
-						$alias_name = ltrim(substr($tbl_name, $commar_pos+1), "'\" ");
-						$tbl_name = trim(substr($tree[$lv]["name$suffix"], 6, $commar_pos-1), $tbl_name[0]." ") . " AS $alias_name";*/
-						
-						// иак-же добавим таблицу в список используемых таблиц
-						in_array($args[0], $data_tracking['tables']) 
-							or $data_tracking['tables'][] = $args[0];
-							
-						// ... а алиас в карту алиасов-таблиц
-						if(isset($data_tracking['table_aliases']))
-							$data_tracking['table_aliases'][$args[1]] = $args[0];
-						else
-							$data_tracking['table_aliases'] = array($args[1] => $args[0]);
+						$tbl_name = "$table_prefix{$args[0]} AS {$args[1]}";
 					} 
 					
 					// table1
 					else {
-						$tbl_name = $tree[$lv]["name$suffix"];
-						
-						// так-же добавим таблицу в список используемых таблиц
-						in_array($tbl_name, $data_tracking['tables']) 
-							or $data_tracking['tables'][] = $tbl_name;
+						$tbl_name = $table_prefix.$tree[$lv]["name$suffix"];
 					}
-				
+
 					// FROM ... / JOIN ...
 					if(empty($suffix)) {
 						$sql_join = $tbl_name; // FROM ...
@@ -812,13 +899,10 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 				$correct_lv = $lv;
 				for($i = $lv+1; $i < count($tree); $i++) {
 					if(strlen($tree[$i]['name']) >= 9 and substr_compare($tree[$i]['name'], 'order_by(', 0, 9, true) == 0) {
-						/*$arg1 = trim(substr($tree[$i]['name'], 9, -1), ' ');
-						$char = empty($arg1) ? '' : $arg1[0];
-						$arg1 = in_array($char, array('"', "'")) 
-							? strtr(substr($arg1, 1, -1), array($char.$char => $char))
-							: $arg1;*/
 						list($args, $args_types) = __uni_parseFuncArgs($tree[$i]['name']);
 						foreach($args as $key => $val) {
+							if($args_types[$key] == 'unipath')
+								$val = uni($val);
 							if(!empty($sql_order_by))
 								$sql_order_by .= ', '.$val;
 							else
@@ -907,14 +991,14 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 				$sql_binds = array_merge($sql_join_binds, $sql_from_binds);
 				$sql = rtrim("SELECT $sql_select FROM $sql_join $sql_where $sql_group_by $sql_order_by $sql_limit", ' ');
 				
-				// ICONV
+				// sql_iconv(...)
 				if(isset($iconv_from, $iconv_to))
 					$sql = iconv($iconv_from, $iconv_to, $sql);
 
 				// выполняем запрос или возвращаем
 // var_dump($sql, $sql_binds, isset($asSQLQuery));
 				if(isset($asSQLQuery)) {
-					$tree[$correct_lv]['data'] = array('query' => $sql, 'params' => $sql_binds);
+					$tree[$correct_lv]['data'] = array('sql_query' => $sql, 'sql_params' => $sql_binds);
 					$tree[$correct_lv]['data_type'] = "array/sql-query-with-params";
 				} elseif($sql == "SELECT * FROM $name" and !isset($tree[$lv]['filter'])) {
 					$tree[$correct_lv]['data'] = array($db, $name);
@@ -1000,14 +1084,8 @@ if(!empty($GLOBALS['unipath_debug'])) echo "<br>--- $lv ---<br>".print_r($tree[$
 			assert('is_array($tree[$lv-1]["data_tracking"]);');
 			assert('isset($tree[$lv-1]["data_tracking"]["cursor()"]);') or var_dump($tree[$lv-1]);
 			
-			$call_result = call_user_func($tree[$lv-1]["data_tracking"]['cursor()'], $tree, $lv-1, 'next');
+			$call_result = call_user_func_array($tree[$lv-1]["data_tracking"]['cursor()'], array(&$tree, $lv-1, 'next'));
 if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call_result);
-
-			// промежуточные переменные курсора перенесём в предыдущий data_tracking
-			if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-				$tree[$lv-1]['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-				unset($call_result['cursor_vars']);
-			}
 				
 			// если ответ это норамальные данные
 			if(is_array($call_result) and !empty($call_result)) {
@@ -1071,27 +1149,15 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 			$tree[$lv]['data_type'] = 'array';
 			$tree[$lv]['data_tracking'] = array(); //$tree[$lv-1]['data_tracking'];
 			$data_tracking = $tree[$lv-1]["data_tracking"];
-			
-			// REWIND - перематаем в начало если это курсор
-			$call_result = call_user_func($data_tracking['cursor()'], $tree, $lv-1, 'rewind');
 
-			// промежуточные переменные курсора перенесём в предыдущий data_tracking
-			if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-				$tree[$lv-1]['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-				unset($call_result['cursor_vars']);
-			}
-			
+			// REWIND - перематаем в начало если это курсор
+			$call_result = call_user_func_array($data_tracking['cursor()'], array(&$tree, $lv-1, 'rewind'));
+
 			global $__uni_prt_cnt;
 			for($prt_cnt = 0; $prt_cnt < $__uni_prt_cnt; $prt_cnt++) {
 
 				// NEXT
-				$call_result = call_user_func($data_tracking['cursor()'], $tree, $lv-1, 'next', $__uni_prt_cnt);
-
-				// промежуточные переменные курсора перенесём в предыдущий data_tracking
-				if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-					$tree[$lv-1]['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-					unset($call_result['cursor_vars']);
-				}
+				$call_result = call_user_func_array($data_tracking['cursor()'], array(&$tree, $lv-1, 'next', $__uni_prt_cnt));
 
 				// если ответ - это одна запись, то преобразуем в массив с одной записью
 				if(is_array($call_result) and isset($call_result['data'], $call_result['data_type'])) {
@@ -1215,14 +1281,13 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 						$args[$key] = $args[$key]['data'];
 					}
 				
-			
 				$tree[$lv]['data'] = call_user_func_array(array($tree[$lv-1]['data'], $func_name), $args);
 				$tree[$lv]['data_type'] = gettype($tree[$lv]['data']) . (is_object($tree[$lv]['data']) ? '/'.get_class($tree[$lv]['data']) : '');
 			} 
 			
 			// тогда поищем и вызовем _uni_<name>()
 			elseif(function_exists("_uni_{$func_name}")) {
-				$tree[$lv] = array_merge($tree[$lv], call_user_func("_uni_{$func_name}", $tree, $lv));
+				$tree[$lv] = array_merge($tree[$lv], call_user_func_array("_uni_{$func_name}", array(&$tree, $lv)));
 			} 
 			
 			// иначе NULL
@@ -1233,29 +1298,46 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 // var_dump($tree[$lv-1]['data'], $func_name, method_exists($tree[$lv-1]['data'], $func_name));
 		}
 		
+		// object-><prop>
+		elseif(strpos($name, '(') === false and strpos($prev_data_type, 'object') === 0) {
+			if(property_exists($tree[$lv-1]['data'], $name)) {
+				$tree[$lv]['data'] = $tree[$lv-1]['data']->$name;
+				$tree[$lv]['data_type'] = gettype($tree[$lv]['data']) . (is_object($tree[$lv]['data']) ? '/'.get_class($tree[$lv]['data']) : '');
+				$tree[$lv]['data_tracking'] = array('key()' => $name);
+			}
+		
+			// иначе NULL
+			else {
+				$tree[$lv]['data'] = null;
+				$tree[$lv]['data_type'] = 'null';
+			}
+		}
+		
 		// _uni_<name>()
 		elseif(strpos($name, '(') != false and sscanf($name, '%[^(]', $src_name)
 			and function_exists("_uni_{$src_name}")) {
-			$tree[$lv] = array_merge($tree[$lv], call_user_func("_uni_{$src_name}", $tree, $lv));
+			$tree[$lv] = array_merge($tree[$lv], call_user_func_array("_uni_{$src_name}", array(&$tree, $lv)));
 		}
 		
-		// php_*()
-		elseif(strpos($name, '(') !== false and strncmp($name, 'php_', 4) == 0) {
+		// php:*(), php_*()
+		elseif(strpos($name, '(') > 5 and (strncmp($name, 'php_', 4) == 0 or strncmp($name, 'php:', 4) == 0)) {
 			$func_name = substr($name, 4, strpos($name, '(')-4);
 			list($args, $args_types) = __uni_parseFuncArgs($name);
-			if(empty($args))
+			if(empty($args) and strncmp($name, 'php_', 4) == 0) // для совместимости со старым кодом
 				$args = array($tree[$lv-1]['data']);
 			else {
 				for($i=0; $i < count($args); $i++)
 					if($args[$i] == '.') 
 						$args[$i] = $tree[$lv-1]['data'];
-					elseif($args_types[$i] == 'unipath')
+					elseif($args_types[$i] == 'unipath') {
 						$args[$i] = __uni_with_start_data(
 							$tree[$lv-1]['data'],
 							$tree[$lv-1]['data_type'],
 							isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null,
 							$args[$i]
 						);
+						$args[$i] = $args[$i]['data'];
+					}
 			}
 			$tree[$lv]['data'] = call_user_func_array($func_name, $args);
 			$tree[$lv]['data_type'] = gettype($tree[$lv]['data']);
@@ -1276,7 +1358,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 					: '');
 				$tree[$lv]['data_tracking'] = array(
 					'cursor()' => '__cursor_filtration', 
-					'cursor_vars' => array('was_rewinded' => false), // ещё не перемотан источник
+					'was_rewinded' => false, // ещё не перемотан источник
 					'name' => $tree[$lv]['name'],
 					'filter' => isset($tree[$lv]['filter']) ? $tree[$lv]['filter'] : null,
 					'tree_node' => & $tree[$lv-1]);
@@ -1286,12 +1368,6 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 			// REWIND - перематаем в начало если это курсор
 			/*if(isset($data_tracking['cursor()'])) {
 				$call_result = call_user_func($data_tracking['cursor()'], $tree, $lv-1, 'rewind');
-
-				// промежуточные переменные курсора перенесём в предыдущий data_tracking
-				if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-					$tree[$lv-1]['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-					unset($call_result['cursor_vars']);
-				}
 				
 				$tree[$lv]['data_tracking'] = & $tree[$lv-1]['data_tracking'];
 			}*/
@@ -1307,11 +1383,6 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 			
 					$call_result = call_user_func($data_tracking['cursor()'], $tree, $lv-1, 'next', 10);
 // var_dump($call_result);
-					// промежуточные переменные курсора перенесём в предыдущий data_tracking
-					if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-						$tree[$lv-1]['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-						unset($call_result['cursor_vars']);
-					}
 				
 					// если ответ это одна запись, то преобразуем в массив с одной записью
 					if(is_array($call_result) and isset($call_result['data'], $call_result['data_type'])) {
@@ -1392,7 +1463,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('no filter - PASS');
 							} elseif(strncmp($filter[$expr]['left'], 'like(', 5) == 0) {
 								list($args, $args_types) = __uni_parseFuncArgs($filter[$expr]['left']);
 								if($args_types[0] == 'unipath')
-									$left_result = __uni_with_start_data($data, gettype($data), null, $filter[$expr]['left']);
+									$left_result = __uni_with_start_data($data, gettype($data), null, $args[0]);
 								else
 									$left_result = $filter[$expr]['left'];
 //var_dump($left_result, trim($func_and_args[1], '%'), strpos($left_result, trim($func_and_args[1], '%')));
@@ -1482,7 +1553,7 @@ if(!empty($GLOBALS['unipath_debug'])) $filter[$expr]['right_result'] = $right_re
 								$filter[$expr]['result'] = false;
 							break;
 						case 'in_right':
-var_dump($left_result, $right_result, $tree[$lv]['unipath']);
+// var_dump($left_result, $right_result, $tree[$lv]['unipath']);
 							$filter[$expr]['result'] = in_array($left_result, $right_result);
 							break;
 						default:
@@ -1533,7 +1604,7 @@ if(!empty($GLOBALS['unipath_debug'])) { var_dump("key = $key, filter = ".($filte
 		}
 		
 		// array/field, array/NNN
-		elseif(in_array($name, array('', '.', '*')) == false and strpos($name, '(') === false and strpos($name, ':') === false and strpos($name, '%') === false) {
+		elseif(in_array($name, array('', '.', '..', '*')) == false and strpos($name, '(') === false and strpos($name, ':') === false and strpos($name, '%') === false) {
 // 			and strncmp($prev_data_type, 'array', 5) == 0 and strpos($name, '(') === false):
 
 			// предыдущий это cursor()
@@ -1542,26 +1613,15 @@ if(!empty($GLOBALS['unipath_debug'])) { var_dump("key = $key, filter = ".($filte
 				$tree[$lv]['data_type'] = 'null';
 
 				// REWIND - перематаем в начало если это курсор
-				$call_result = call_user_func($tree[$lv-1]['data_tracking']['cursor()'], $tree, $lv-1, 'rewind');
+				$call_result = call_user_func_array($tree[$lv-1]['data_tracking']['cursor()'], array(&$tree, $lv-1, 'rewind'));
 
-				// промежуточные переменные курсора перенесём в предыдущий data_tracking
-				if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-					$tree[$lv-1]['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-					unset($call_result['cursor_vars']);
-				}
-				
 				global $__uni_prt_cnt;
 				for($prt_cnt = 0; $prt_cnt < $__uni_prt_cnt; $prt_cnt++) {
 					
-					$call_result = call_user_func($tree[$lv-1]['data_tracking']['cursor()'], $tree, $lv-1, 'next', 10);
+					$call_result = call_user_func_array($tree[$lv-1]['data_tracking']['cursor()'], array(&$tree, $lv-1, 'next', 10));
 if(!empty($GLOBALS['unipath_debug'])) var_dump($call_result);
-					// cursor_vars - промежуточные переменные курсора перенесём в предыдущий data_tracking
-					if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-						$tree[$lv-1]['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-						unset($call_result['cursor_vars']);
-					}
 					
-					// если ответ это одна запись, то преобразуем в массив с одной записьмю
+					// если ответ это одна запись, то преобразуем в массив с одной записью
 					if(is_array($call_result) and isset($call_result['data'], $call_result['data_type'])) {
 						if($call_result['data_tracking']['key()'] == $name) {
 							$tree[$lv]['data'] = $call_result['data'];
@@ -1682,6 +1742,185 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump($call_result['data_tracking']['ke
 			
 		}
 		
+		// [...] - пропустить или нет дальше
+		elseif($name == '' and !empty($tree[$lv]['filter'])) {
+		
+			$data = $tree[$lv-1]['data'];
+			$key = isset($tree[$lv-1]['data_tracking'], $tree[$lv-1]['data_tracking']['key()']) ? $tree[$lv-1]['data_tracking']['key()'] : null;
+		
+			$expr = $tree[$lv]['filter']['start_expr'];
+			$filter = $tree[$lv]['filter'];
+			while($expr && isset($filter[$expr])) {
+				// left
+				switch($filter[$expr]['left_type']) {
+					case 'unipath':
+						$left_result = __uni_with_start_data($tree[$lv-1]['data'], $tree[$lv-1]['data_type'], isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null, $filter[$expr]['left']);
+						$left_result = $left_result['data'];
+						break;
+					case 'expr':
+// if(!isset($filter[$filter[$expr]['left']]['result'])) print_r($filter);
+						$left_result = $filter[$filter[$expr]['left']]['result'];
+						break;
+					case 'name':
+						if(in_array($filter[$expr]['left'], array('null', 'NULL')))
+							$left_result = null;
+						else
+							$left_result = isset($data[$filter[$expr]['left']]) ? $data[$filter[$expr]['left']] : null;
+						break;
+					case 'function':
+						if($filter[$expr]['left'] == 'key()') {
+							/* if(isset($tree[$lv-1]['data_tracking']) 
+							and is_array($tree[$lv-1]['data_tracking']) 
+							and isset($tree[$lv-1]['data_tracking']['key()'])) {
+								$left_result = $tree[$lv-1]['data_tracking']['key()'];
+							} else */
+								$left_result = $key;
+						} elseif(strncmp($filter[$expr]['left'], 'like(', 5) == 0) {
+							list($args, $args_types) = __uni_parseFuncArgs($filter[$expr]['left']);
+							if($args_types[0] == 'unipath')
+								$left_result = __uni_with_start_data($tree[$lv-1]['data'], $tree[$lv-1]['data_type'], isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null, $args[0]);
+							else
+								$left_result = $filter[$expr]['left'];
+//var_dump($left_result, trim($func_and_args[1], '%'), strpos($left_result, trim($func_and_args[1], '%')));
+							$left_result = strpos($left_result, trim($args[1], '%')) !== false;
+						} 
+						// иначе обробатываем как unipath
+						else {
+							$left_result = __uni_with_start_data($tree[$lv-1]['data'], $tree[$lv-1]['data_type'], isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null, $filter[$expr]['left']);
+							$left_result = $left_result['data'];
+						}
+						break;
+					case 'dot':
+						$left_result = $data;
+						break;
+					case 'string':
+					case 'number':
+					default:
+						$left_result = $filter[$expr]['left'];
+						break;
+				}
+if(!empty($GLOBALS['unipath_debug'])) $filter[$expr]['left_result'] = $left_result;
+
+				// right
+				if(isset($filter[$expr]['right_type']))
+				switch($filter[$expr]['right_type']) { 
+					case 'unipath':
+						$right_result = __uni_with_start_data($tree[$lv-1]['data'], $tree[$lv-1]['data_type'], isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null, $filter[$expr]['right']);
+						$right_result = $right_result['data'];
+						break;
+					case 'expr':
+						$right_result = $filter[$filter[$expr]['right']]['result'];
+						break;
+					case 'name':
+						if(in_array($filter[$expr]['right'], array('null', 'NULL')))
+							$right_result = null;
+						else
+							$right_result = isset($row[$filter[$expr]['right']]) ? $row[$filter[$expr]['right']] : null;
+					case 'list_of_strings':
+						$right_result = $filter[$expr]['right'];
+						$filter[$expr]['op'] = 'in_right';
+						break;
+					case 'string':
+					case 'number':
+					default:
+						$right_result = $filter[$expr]['right'];
+						break;
+				}
+if(!empty($GLOBALS['unipath_debug'])) $filter[$expr]['right_result'] = $right_result;
+				// op
+				if(!isset($filter[$expr]['op']))
+					$filter[$expr]['result'] = $left_result;
+				else
+				switch($filter[$expr]['op']) {
+					case '=':
+
+						// 0 == 'abc' or 'abc' == 0 -> true!!!
+						if(is_numeric($left_result) and is_numeric($right_result))
+							$filter[$expr]['result'] = $left_result == $right_result;
+						else
+							$filter[$expr]['result'] = $left_result === $right_result;
+						break;
+					case '<>':
+					case '!=':
+						$filter[$expr]['result'] = $left_result != $right_result;
+						break;
+					case 'or':
+						$filter[$expr]['result'] = $left_result || $right_result;
+						break;
+					case 'and':
+						$filter[$expr]['result'] = $left_result && $right_result;
+						break;
+					case '>':
+						if(is_numeric($left_result) and is_numeric($right_result)) 
+							$filter[$expr]['result'] = $left_result > $right_result;
+						else
+							$filter[$expr]['result'] = false;
+						break;
+					case '<':
+						if(is_numeric($left_result) and is_numeric($right_result)) 
+							$filter[$expr]['result'] = $left_result < $right_result;
+						else
+							$filter[$expr]['result'] = false;
+						break;
+					case '<=':
+						if(is_numeric($left_result) and is_numeric($right_result)) 
+							$filter[$expr]['result'] = $left_result <= $right_result;
+						else
+							$filter[$expr]['result'] = false;
+						break;
+					case '>=':
+						if(is_numeric($left_result) and is_numeric($right_result)) 
+							$filter[$expr]['result'] = $left_result >= $right_result;
+						else
+							$filter[$expr]['result'] = false;
+						break;
+					case 'in_right':
+// var_dump($left_result, $right_result, $tree[$lv]['unipath']);
+						$filter[$expr]['result'] = in_array($left_result, $right_result);
+						break;
+					default:
+						$filter[$expr]['result'] = $left_result;
+				}
+
+				// next
+				$last_expr = $expr;
+				$expr = empty($filter[$expr]['next']) ? false : $filter[$expr]['next'];
+			}
+
+if(!empty($GLOBALS['unipath_debug'])) { var_dump("key = $key, filter = ".($filter[$last_expr]['result']?'PASS':'FAIL'), $data); print_r($filter); }
+			// если прошёл фильтрацию копируем дальше
+			if($filter[$last_expr]['result']) {
+				$tree[$lv]['data'] = $tree[$lv-1]['data'];
+				$tree[$lv]['data_type'] = $tree[$lv-1]['data_type'];
+				$tree[$lv]['data_tracking'] = $tree[$lv-1]['data_tracking'];
+				
+				// специально пометим, что это копия предыдущего шага
+				if( ! isset($tree[$lv-1]['data_tracking']['this_step_is_copy_of_step']))
+					$tree[$lv]['data_tracking']['this_step_is_copy_of_step'] = $lv-1;
+			} 
+			
+			// не прошёл фильтрацию!
+			else {
+				$tree[$lv]['data'] = null;
+				$tree[$lv]['data_type'] = 'null';
+// 					$tree[$lv]['data_tracking'] = null;
+			}
+		}
+		
+		// /..
+		elseif($name == '..') {
+			$tree[$lv]['data'] = $lv > 1 ? $tree[$lv-2]['data'] : null;
+			$tree[$lv]['data_type'] = $lv > 1 ? $tree[$lv-2]['data_type'] : 'null';
+			if($lv > 1 && isset($tree[$lv-2]['data_tracking']))
+				$tree[$lv]['data_tracking'] = $tree[$lv-2]['data_tracking'];
+			else
+				$tree[$lv]['data_tracking'] = array();
+			
+			// специально пометим, что это копия предыдущего шага
+			if( ! isset($tree[$lv]['data_tracking']['this_step_is_copy_of_step']))
+				$tree[$lv]['data_tracking']['this_step_is_copy_of_step'] = $lv-2;
+		}
+		
 		// если не понятно что делать, тогда просто копируем данные
 		else {
 			$tree[$lv]['data'] = $lv > 0 ? $tree[$lv-1]['data'] : array();
@@ -1690,7 +1929,10 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump($call_result['data_tracking']['ke
 				$tree[$lv]['data_tracking'] = $tree[$lv-1]['data_tracking'];
 			else
 				$tree[$lv]['data_tracking'] = array();
-			$tree[$lv]['data_tracking']['this_step_is_copy_of_step'] = $lv-1;
+			
+			// специально пометим, что это копия предыдущего шага
+			if( ! isset($tree[$lv]['data_tracking']['this_step_is_copy_of_step']))
+				$tree[$lv]['data_tracking']['this_step_is_copy_of_step'] = $lv-1;
 		};
 		
 		// сохраним для отладки
@@ -1720,8 +1962,9 @@ if(!empty($GLOBALS['unipath_debug'])) {
 	return $tree;
 }
 
+// парсит unipath запрос на отдельные шаги (аргументы функций не парсит)
 function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = null, $start_data_tracking = null) {
-
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('Parsing - '.$xpath);
 		// временно переключим mbstring.func_overload в 1-байтовую кодировку
 		if(ini_get('mbstring.func_overload') > 1) {
 			$mbstring_internal_encoding = ini_get('mbstring.internal_encoding');
@@ -1771,8 +2014,9 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 			$tree[] = array('name' => null);
 		} 
 
-		while($p < strlen($xpath)) {
-		
+		global $__uni_prt_cnt; // защита от зацикливания
+		for($prt_cnt = $__uni_prt_cnt; $p < strlen($xpath) and $prt_cnt > 0; $prt_cnt--) {
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("0:$p => ".substr($xpath, 0, $p));
 			// новая ось
 			if($xpath[$p] == '/') {
 			
@@ -1809,39 +2053,64 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 			if(strpos("\\|/,+[](){}?!~`'\";#^&=- \n\t", $xpath[$p]) === false) {
 				$start_p = $p;
 				$len = strcspn($xpath, "\\|/,+[](){}?!~`'\";#^&= \t\n", $start_p);
-				$tree[count($tree)-1]['name'.$suffix] = substr($xpath, $start_p, $len);
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("fieldname detected: $p,$len = ".substr($xpath, $start_p, $len));
 				$p += $len;
 
-				// может это function() ?
+				// может это function()?
 				if(isset($xpath[$p]) and $xpath[$p] == '(') {
-					$inner_brakets = 1; $inner_string = false;
-					while($inner_brakets > 0) {
-						$tree[count($tree)-1]['name'.$suffix] .= $xpath[$p++];
-						if(!isset($xpath[$p])) throw new Exception("UniPath: __uni_parseUniPath(): Not found close braket in $xpath!");
-						if($xpath[$p] == "'") $inner_string = !$inner_string;
-						if($xpath[$p] == '(' and !$inner_string) $inner_brakets++;
-						if($xpath[$p] == ')' and !$inner_string) $inner_brakets--;
+					
+					$tmp_stack = new SplFixedArray(32); $tmp_num = 0; $tmp_stack[0] = 12;
+					while($p < strlen($xpath)) {
+						if($xpath[$p] == '(' and  $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 12;
+						elseif($xpath[$p] == ')' and $tmp_num == 1) { $p++; break; }
+						elseif($xpath[$p] == ')' and $tmp_stack[$tmp_num] == 12) $tmp_num--;
+						elseif($xpath[$p] == "'" and $tmp_stack[$tmp_num] == 1) $tmp_num--;
+						elseif($xpath[$p] == "'" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 1;
+						elseif($xpath[$p] == "\"" and $tmp_stack[$tmp_num] == 2) $tmp_num--;
+						elseif($xpath[$p] == "\"" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 2;
+						elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] == 3) $tmp_num--;
+						elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 3;
+						
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("function_parse - {$xpath[$p]}, tmp_num = ".$tmp_num.", tmp_stack[{$tmp_num}] = ".$tmp_stack[$tmp_num]);
+						$p++;
 					}
-					$tree[count($tree)-1]['name'.$suffix] .= $xpath[$p++];
+					
+/*					$inner_brakets = 1; $inner_string = false;
+					while($inner_brakets > 0 and isset($xpath[$p])) { 
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("braket_mode: xpath[p] = {$xpath[$p]}, inner_string =  $inner_string");
+						$tree[count($tree)-1]['name'.$suffix] .= $xpath[$p++];
+						if(!isset($xpath[$p]))
+							trigger_error("UniPath: __uni_parseUniPath(): Not found close braket in $xpath!", E_USER_ERROR);
+						
+						if($xpath[$p] == "'" and $inner_string == false)  $inner_string = "'";
+						elseif($xpath[$p] == "'" and $inner_string == "'")  $inner_string = false;
+						elseif($xpath[$p] == "`" and $inner_string == false)  $inner_string = "`";
+						elseif($xpath[$p] == "`" and $inner_string == "`")  $inner_string = false;
+						elseif($xpath[$p] == '(' and !$inner_string) $inner_brakets++;
+						elseif($xpath[$p] == ')' and !$inner_string) $inner_brakets--;
+					}
+					$tree[count($tree)-1]['name'.$suffix] .= $xpath[$p++]; */
+					
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("braket_mode_result = ".substr($xpath, $start_p, $p - $start_p));
 				}
 				
-				// Кастыль: возможно это название файла со скобками
-				/* while(isset($xpath[$p]) and !in_array($xpath[$p], array('/', '[', "\n", "\t")))
-					$tree[count($tree)-1]['name'.$suffix] .= $xpath[$p++]; */
-				
+				$tree[count($tree)-1]['name'.$suffix] = substr($xpath, $start_p, $p - $start_p);
+			
 				continue;
 			}
 			
 			// [] фильтрация
 			if($xpath[$p] == '[') {
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filtration start - $p");
 				$p++; // [
-								
+
 				// разбираем фильтр
 				$filter = array('start_expr' => 'expr1', 'expr1' => array() );
 				$next_expr_num = 2;
 				$expr = 'expr1';
 				$expr_key = 'left';
 				while($p < strlen($xpath) and $xpath[$p] != ']') {
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("--- $expr --- ".(isset($filter[$expr]['op'])?$filter[$expr]['op']:''));
 					while(strpos(" \n\t", $xpath[$p]) !== false) $p++;
 //print_r(array(substr($xpath, 0, $p), $filter));
 					// до конца фильтрации были пробелы?
@@ -1849,6 +2118,7 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 					
 					// (
 					if($xpath[$p] == '(') {
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_opened - $p");
 						$filter[$expr]['open_braket'] = true;
 						$p++;
 						continue;
@@ -1856,6 +2126,7 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 					
 					// )
 					if($xpath[$p] == ')') {
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_closed - $p");
 						$filter[$expr]['close_braket'] = true;
 						$p++;
 						continue;
@@ -2116,14 +2387,19 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 					};
 				
 					// название поля
-					if(strpos('@qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_', $xpath[$p]) !== false) {
+					/*if(strpos('@qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_', $xpath[$p]) !== false) {
+					
+						// N'...' -> MS SQL UnicodeString
+						if($xpath[$p] == 'N' and isset($xpath[$p+1]) and $xpath[$p+1] == "'")
+							continue;
+					
 						$start_p = $p;
 						while(strpos('@qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_0123456789-.', $xpath[$p]) !== false) 
 							$p++;
 						$filter[$expr][$expr_key] = substr($xpath, $start_p, $p - $start_p); 
 						$filter[$expr][$expr_key.'_type'] = 'name';
 						
-						// возможно это func()
+						// возможно это function или unipath
 						if(isset($xpath[$p]) and $xpath[$p] == '(') {
 							while($xpath[$p] != ')')
 								$filter[$expr][$expr_key] .= $xpath[$p++];
@@ -2132,7 +2408,7 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 						}
 				
 						continue;
-					}
+					}*/
 
 					// число
 					if(strpos('0123456789', $xpath[$p]) !== false or ($xpath[$p] == '-' 
@@ -2159,14 +2435,23 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 					}
 					
 					// строка
-					if($xpath[$p] == "'" or $xpath[$p] == '"' or $xpath[$p] == '`') {
+					if($xpath[$p] == "'" or $xpath[$p] == '"' or $xpath[$p] == '`'
+						or ($xpath[$p] == 'N' and isset($xpath[$p+1]) and $xpath[$p+1] == "'")) {
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_string_start - $p");
+						// подкоректируем начало MSSQL UnicodeString
+						if($xpath[$p] == 'N') { 
+							$p++; 
+							$filter[$expr][$expr_key.'_type'] = 'string-with-N'; 
+						} else
+							$filter[$expr][$expr_key.'_type'] = 'string'; 
+							
+							
 						$start_p = $p++;
 						$p = strcspn($xpath, $xpath[$start_p], $p);
 						$val = substr($xpath, $start_p+1, $p);
 						$p = $start_p + $p + 2;
 
 						$filter[$expr][$expr_key] = $val;
-						$filter[$expr][$expr_key.'_type'] = 'string';
 						
 						// возможно это список строк
 						$space = strspn($xpath, " \t\n", $p);
@@ -2193,7 +2478,7 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 					}
 					
 					// текущий элемент
-					if($xpath[$p] == '.') {
+					if($xpath[$p] == '.' and isset($xpath[$p+1]) and $xpath[$p+1] != '/') {
 						$p++;
 						$filter[$expr][$expr_key] = '.';
 						$filter[$expr][$expr_key.'_type'] = 'dot';
@@ -2201,25 +2486,51 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 					}
 					
 					// вложенный unipath
-					if($xpath[$p] == '/') {
-						$start_p = $p;
+					if(strpos('./@qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_', $xpath[$p]) !== false) {
+						
+						// N'...' -> MS SQL UnicodeString
+						if($xpath[$p] == 'N' and isset($xpath[$p+1]) and $xpath[$p+1] == "'")
+							continue;
 					
-						$flag_string = false;
-						while(!in_array($xpath[$p], array(' ', ']', "\n", '=')) and $p < strlen($xpath)) {
-// echo "$p = $xpath[$p]\n";
-							// грязный пропуск строк
-							if(strpos(' "\'`', $xpath[$p]) > 0)
-								for($p++; $p < strlen($xpath) and strpos(' "\'`', $xpath[$p]) === false; $p++);
+						$start_p = $p;
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_detected - $p");
+
+						// [-91, \-92, ]-93, (-40, )-41, '-39, "-34, `-96
+						$func_flag = false; $unipath_flag = $xpath[$p] == '/';
+						$tmp_stack = new SplFixedArray(32); $tmp_num = 0;
+						while($p < strlen($xpath)) {
+							if($xpath[$p] == '[') { $tmp_stack[++$tmp_num] = $unipath_flag = 11; }
+							elseif($xpath[$p] == ']' and $tmp_stack[$tmp_num] == 11) $tmp_num--;
+							elseif($xpath[$p] == '(') { $tmp_stack[++$tmp_num] = $func_flag = 12; }
+							elseif($xpath[$p] == ')' and $tmp_num == 0) break;
+							elseif($xpath[$p] == ')' and $tmp_stack[$tmp_num] == 12) $tmp_num--;
+							elseif($xpath[$p] == "'" and $tmp_stack[$tmp_num] == 1) $tmp_num--;
+							elseif($xpath[$p] == "'" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 1;
+							elseif($xpath[$p] == "\"" and $tmp_stack[$tmp_num] == 2) $tmp_num--;
+							elseif($xpath[$p] == "\"" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 2;
+							elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] == 3) $tmp_num--;
+							elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 3;
+							elseif($xpath[$p] == "/") $unipath_flag = true;
+							elseif(strpos(" \n\t]=<>*-+!", $xpath[$p]) !== false and $tmp_num == 0) break;
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_skip - {$xpath[$p]}, tmp_num = ".$tmp_num.", tmp_stack[{$tmp_num}] = ".$tmp_stack[$tmp_num]);
 							$p++;
 						}
 						
 						$val = substr($xpath, $start_p, $p - $start_p);
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_result = $val, func_flag = $func_flag, unipath_flag = $func_flag");
 
-						if(isset($filter[$expr][$expr_key]))
+						/*if(isset($filter[$expr][$expr_key]))
 							$filter[$expr][$expr_key] .= $val;
+						else*/
+						
+						$filter[$expr][$expr_key] = $val;
+						
+						if($unipath_flag)
+							$filter[$expr][$expr_key.'_type'] = 'unipath';
+						elseif($func_flag)
+							$filter[$expr][$expr_key.'_type'] = 'function';
 						else
-							$filter[$expr][$expr_key] = $val;
-						$filter[$expr][$expr_key.'_type'] = 'unipath';
+							$filter[$expr][$expr_key.'_type'] = 'name';
 
 						continue;
 					}
@@ -2238,6 +2549,7 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 			
 			// `'" строка
 			if($xpath[$p] == '`' or $xpath[$p] == '"' or $xpath[$p] == "'") {
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('string start - '.$p);
 				//$start_string_p = $p++;
 				switch($xpath[$p]) {
 					case '`':
@@ -2254,6 +2566,9 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 				
 				// поищем окончание строки
 				$end = strpos($xpath, $string_border, $p);
+				if($end === false) 
+					trigger_error("UniPath.__uni_parseUniPath(): Not found end of string started on $p! (".substr($xpath, $p-strlen($string_border)).')', E_USER_ERROR);
+
 				$tree[count($tree)-1]['name'.$suffix] = substr($xpath, $p, $end-$p);
 				
 				// передвинем указатель
@@ -2299,9 +2614,9 @@ function __uni_parseFuncArgs($string) {
 		elseif($in_string)
 			$len = strcspn($string, $in_string, $p);
 		else
-			$len = strcspn($string, ",()'\"`=", $p);
+			$len = strcspn($string, ",()[]'\"`=", $p);
 			
-if(!empty($GLOBALS['unipath_debug'])) echo(" --- $mode\n ".substr($string, $p+$len).' -- p='.$p.' brakets_level='.$brakets_level);
+if(!empty($GLOBALS['unipath_debug'])) echo(" <-- $mode \n |".substr($string, $p, $len).'|'.substr($string, $p+$len)." -- p:len=$p:$len brakets_level=$brakets_level");
 
 		if($len+$p == $strlen) break; // дошли до конца строки
 		
@@ -2314,22 +2629,22 @@ if(!empty($GLOBALS['unipath_debug'])) echo(" --- $mode\n ".substr($string, $p+$l
 			continue;
 		}
 		
-		// (
-		if($string[$p+$len] == '(' and !$in_string and !$in_binary_string) {
+		// (,[
+		if(strspn($string[$p+$len], '([') and !$in_string and !$in_binary_string) {
 			$brakets_level++;
 			$p += $len+1;
 			$mode = 'open_braket';
 			continue;
 		}
 		
-		// )
-		if($string[$p+$len] == ')' and !$in_string and !$in_binary_string) {
+		// ),[
+		if(strspn($string[$p+$len], ')]') and !$in_string and !$in_binary_string) {
 			$brakets_level--;
 			
 			if($brakets_level == 0) {
 				if(isset($last_string)) {
 					$result[$arg_key] = $last_string;
-					$result_types[$arg_key] = 'string';
+					$result_types[$arg_key] = $mode == 'in_string_end_N' ? 'string-with-N' : 'string';
 					$last_string = null;
 				} elseif($arg_start < $p+$len) {
 					$result[$arg_key] = trim(substr($string, $arg_start, $p+$len-$arg_start));
@@ -2354,13 +2669,14 @@ if(!empty($GLOBALS['unipath_debug'])) echo(" --- $mode\n ".substr($string, $p+$l
 		}
 		
 		// ' - string
-		if($string[$p+$len] == "'" and !$in_string and !$in_binary_string) {
+		if(($string[$p+$len] == "'" or substr_compare($string, "N'", $p+$len-1, 2) == 0) 
+			and !$in_string and !$in_binary_string) {
 			if(isset($last_string) and is_null($last_string) == false)
 				trigger_error("UniPath: __uni_parseFuncArgs(): unexpected single quote ' on position $p - ".substr($string, $p), E_USER_NOTICE);
 			$in_string = "'";
 			$last_string = '';
-			$p += $len+1;
-			$mode = 'in_string_start';
+			$mode = 'in_string_start'.($string[$p+$len-1] == 'N' ? '_N' : '');
+			$p += $len + 1;
 			continue;
 		}
 		
@@ -2379,7 +2695,7 @@ if(!empty($GLOBALS['unipath_debug'])) echo(" --- $mode\n ".substr($string, $p+$l
 				$last_string .= substr($string, $p, $len);
 				$in_string = false;
 				$p += $len+1;
-				$mode = 'in_string_end';
+				$mode = $mode == 'in_string_start_N' ? 'in_string_end_N' : 'in_string_end';
 				continue;
 			//}
 		}
@@ -2468,7 +2784,7 @@ if(!empty($GLOBALS['unipath_debug'])) echo(" --- $mode\n ".substr($string, $p+$l
 				
 			if(isset($last_string)) {
 				$result[$arg_key] = $last_string;
-				$result_types[$arg_key] = 'string';
+				$result_types[$arg_key] = $mode == 'in_string_end_N' ? 'string-with-N' : 'string';
 				$last_string = null;
 			} else {
 				$result[$arg_key] = trim(substr($string, $arg_start, $p+$len-$arg_start));
@@ -2528,35 +2844,31 @@ if(!empty($GLOBALS['unipath_debug'])) echo(" --- $mode\n ".substr($string, $p+$l
 	return array($result, $result_types);
 }
 
-function __cursor_filtration($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null, $cursor_arg1_data_type = null, $cursor_arg1_data_tracking = null) {
-// if($cursor_cmd != 'next' or !empty($GLOBALS['unipath_debug']))
-// var_dump($tree[$lv]['name']." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($cursor_arg1)&&isset($cursor_arg1['name'])?$cursor_arg1['name']:'')); 
+function __cursor_filtration(&$tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null, $cursor_arg1_data_type = null, $cursor_arg1_data_tracking = null) {
+if(/*$cursor_cmd != 'next' or */!empty($GLOBALS['unipath_debug']))
+var_dump($tree[$lv]['name']." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($cursor_arg1)&&isset($cursor_arg1['name'])?$cursor_arg1['name']:'')); 
 
-	if(!in_array($cursor_cmd, array('rewind', 'next'))) return false;
+	if(in_array($cursor_cmd, array('rewind', 'next')) == false) return false;
 
-	$cursor_vars = isset($tree[$lv]['data_tracking']['cursor_vars']) ? $tree[$lv]['data_tracking']['cursor_vars'] : array();
-	
-	$tree_node = & $tree[$lv]['data_tracking']['tree_node'];
-	assert('function_exists($tree_node["data_tracking"]["cursor()"]);') or var_dump($tree_node);
-	
+	// проверим корректность
+	assert('is_array($tree[$lv]["data_tracking"]);');
+	assert('function_exists($tree[$lv]["data_tracking"]["tree_node"]["data_tracking"]["cursor()"]);') or var_dump($tree[$lv]['data_tracking']['tree_node']);
+
+	// наше искуственное внутреннее дерево
+	$tree2 = array( &$tree[$lv]['data_tracking']['tree_node'] );
+
 	// REWIND - перематаем в начало
-	if($cursor_cmd == 'rewind' or ($cursor_cmd == 'next' and empty($cursor_vars['was_rewinded']))) {
-					
-		$call_result = call_user_func($tree_node['data_tracking']['cursor()'], array($tree_node), 0, 'rewind');
-
-		// промежуточные переменные курсора перенесём в предыдущий data_tracking
-		if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-			$tree_node['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-// 			unset($call_result['cursor_vars']);
-		}
+	if($cursor_cmd == 'rewind' or ($cursor_cmd == 'next' and empty($tree[$lv]['data_tracking']['was_rewinded']))) {
 		
-		$cursor_vars['was_rewinded'] = true;
+		$call_result = call_user_func_array($tree2[0]['data_tracking']['cursor()'], 
+			array(&$tree2, 0, 'rewind'));
 
-		// если попросили только перемотать, то вернём результат и наши $cursor_vars
+		$tree[$lv]['data_tracking']['was_rewinded'] = true;
+		$tree[$lv]['data_tracking']['current_pos'] = 0; // сбросим позицию
+
+		// если попросили только перемотать, то вернём результат
 		if($cursor_cmd == 'rewind')
-			return array(
-				is_array($call_result) ? $call_result[0]: $call_result, 
-				'cursor_vars' => $cursor_vars);
+			return $call_result;
 	}
 	
 	// NEXT
@@ -2566,18 +2878,13 @@ function __cursor_filtration($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = 
 	global $__uni_prt_cnt;
 	for($prt_cnt = 0; $prt_cnt < $__uni_prt_cnt; $prt_cnt++) {
 
-		$call_result = call_user_func($tree_node['data_tracking']['cursor()'], array($tree_node), 0, 'next'/*, $cursor_arg1*/);
+		$call_result = call_user_func_array($tree2[0]['data_tracking']['cursor()'], 
+			array(&$tree2, 0, 'next'/*, $cursor_arg1*/));
 if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.".\$call_result => ", $call_result);
 
-		// cursor_vars - промежуточные переменные курсора перенесём в предыдущий data_tracking
-		if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-			$tree_node['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-			unset($call_result['cursor_vars']);
-		}
-		
-		// пустой или отрицательный ответ, возвращаем как есть.
+		// пустой или отрицательный ответ - возвращаем как есть.
 		if(empty($call_result) or !is_array($call_result)) {
-			return array('cursor_vars' => $cursor_vars);
+			return $call_result;
 		}
 		
 		// теперь фильтруем
@@ -2596,7 +2903,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.".\$call_result => "
 		// возможно фильтра нет и фильтровать не надо
 		if(empty($tree[$lv]['data_tracking']['filter'])) {
 if(!empty($GLOBALS['unipath_debug'])) var_dump('no filter - PASS');
-			return array_merge($call_result, array('cursor_vars' => $cursor_vars));
+			return $call_result;
 		}
 				
 		$expr = $tree[$lv]['data_tracking']['filter']['start_expr'];
@@ -2732,7 +3039,13 @@ if(!empty($GLOBALS['unipath_debug'])) { var_dump("key = $key, filter = ".($filte
 
 		// если прошёл фильтрацию
 		if($filter[$last_expr]['result']) {
-			return array_merge($call_result, array('cursor_vars' => $cursor_vars));
+		
+			// если специально указали, не сохранять ключи, то считаем по своему
+			if(isset($call_result['data_tracking'], $call_result['data_tracking']['preserve_keys']) and $call_result['data_tracking']['preserve_keys'] == false) {
+				$call_result['data_tracking']['key()'] = $tree[$lv]['data_tracking']['current_pos']++;
+			}
+			
+			return $call_result;
 		} 
 	}
 	
@@ -2745,7 +3058,7 @@ if(!empty($GLOBALS['unipath_debug'])) { var_dump("key = $key, filter = ".($filte
 	assert('$tree');
 } */
 
-function __cursor_database($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null, $cursor_arg1_type = null, $cursor_arg1_tracking = null) {
+function __cursor_database(&$tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null, $cursor_arg1_type = null, $cursor_arg1_tracking = null) {
 if(/*$cursor_cmd != 'next' or*/ !empty($GLOBALS['unipath_debug']))
 var_dump((isset($tree[$lv]['name'])?$tree[$lv]['name']:'?')." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($cursor_arg1)&&isset($cursor_arg1['name'])?$cursor_arg1['name']:''));
 
@@ -2755,16 +3068,20 @@ var_dump((isset($tree[$lv]['name'])?$tree[$lv]['name']:'?')." -- ".__FUNCTION__.
 	if($cursor_cmd == 'set')
 		return __cursor_database_set($tree, $lv, $cursor_arg1, $cursor_arg1_type, $cursor_arg1_tracking);
 
-	// дополнительная информация о базе хранятся в кеше - она нам пригодится
+	// db-row - не надо перематывать и обрабатывать курсором
+	if($cursor_cmd == 'rewind' and $tree[$lv]['data_type'] == 'array/db-row')
+		return false;
+		
+	// дополнительная информация о базе хранится в кеше - она нам пригодится
 	if($cursor_cmd == 'rewind' or $cursor_cmd == 'next') {
+if(!empty($GLOBALS['unipath_debug'])) var_dump('UniPath.'.__FUNCTION__."($cursor_cmd): start \$data_tracking = ", $tree[$lv]['data_tracking']);
 		if(!isset($GLOBALS['__cursor_database']))
 			$GLOBALS['__cursor_database'] = array(array('db' => $tree[$lv]['data_tracking']['db']));
 		foreach($GLOBALS['__cursor_database'] as $num => $item) 
 			if($item['db'] == $tree[$lv]['data_tracking']['db']) 
 				$cache_item =& $GLOBALS['__cursor_database'][$num];
 		
-		$data_tracking = $tree[$lv]['data_tracking'];
-		$cursor_vars = isset($data_tracking['cursor_vars']) ? $cursor_vars = $data_tracking['cursor_vars'] : array();
+		$data_tracking = &$tree[$lv]['data_tracking'];
 	}
 	
 	// REWIND - попросили перемотать для следующих next()
@@ -2779,12 +3096,12 @@ var_dump((isset($tree[$lv]['name'])?$tree[$lv]['name']:'?')." -- ".__FUNCTION__.
 				$GLOBALS['unipath_debug_sql'][] = $sql_query;
 			else
 // 				trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
-				echo "\nUniPath: ".__FUNCTION__.': '.$sql_query; // error_reporting(0);
+				echo "\nUniPath.".__FUNCTION__.': '.$sql_query; // error_reporting(0);
 		}
 		
 		// ещё не выполнянли запрос - выполним
-		if(array_key_exists('stmt', $cursor_vars) == false) {
-// var_dump('First rewind', $cursor_vars);
+		if(array_key_exists('stmt', $data_tracking) == false) {
+if(!empty($GLOBALS['unipath_debug'])) var_dump('First rewind', $data_tracking);
 			switch($data_tracking['db_type']) {
 			case 'object/PDO':
 				$res = $db->prepare($sql_query);
@@ -2799,38 +3116,38 @@ var_dump((isset($tree[$lv]['name'])?$tree[$lv]['name']:'?')." -- ".__FUNCTION__.
 				if(!$res or isset($res_execute_result) and !$res_execute_result) {
 					$err_info = $db->errorInfo();
 					if($err_info[0] == '00000')
-						trigger_error("UniPath: __cursor_database: PDO: execute() return false! ($sql_query)", E_USER_NOTICE);
+						trigger_error("UniPath.__cursor_database($cursor_cmd): PDO: execute() return false! ($sql_query)", E_USER_NOTICE);
 					else
-						trigger_error("UniPath: __cursor_database: PDO: ".implode(';',$err_info)." ($sql_query)", E_USER_NOTICE);
+						trigger_error("UniPath.__cursor_database($cursor_cmd): PDO: ".implode(';',$err_info)." ($sql_query)", E_USER_NOTICE);
 					$cache_item['last_error()'] = $err_info;
 				} 
 				
 				// успешно выполнен запрос
 				else {
-					$cursor_vars['stmt'] = $res;
-					$cursor_vars['current_pos'] = 0;
+					$data_tracking['stmt'] = $res;
+					$data_tracking['current_pos'] = 0;
 					$cache_item['last_affected_rows()'] = $res->rowCount();
-					if(isset($data_tracking['result_cache']))
-						$cursor_vars['stmt_result_rows'] =& $data_tracking['result_cache'];
+// 					if(isset($data_tracking['result_cache']))
+// 						$data_tracking['result_cache'] =& $data_tracking['result_cache'];
 				}
 				break;
 			case 'resource/mysql-link':
 				$res = mysql_query($sql_query, $db);
 				if(empty($res)) {
-					trigger_error("UniPath: __cursor_database: MySQL Query: mysql_errno=".mysql_errno($db).", mysql_error=".mysql_error($db))." ($sql_query)";
+					trigger_error("UniPath.__cursor_database($cursor_cmd): MySQL Query: mysql_errno=".mysql_errno($db).", mysql_error=".mysql_error($db))." ($sql_query)";
 					$cache_item['last_error()'] = array(mysql_errno($db), mysql_error($db));
 				} else {
-					$cursor_vars['stmt'] = $res;
-					$cursor_vars['current_pos'] = 0;
+					$data_tracking['stmt'] = $res;
+					$data_tracking['current_pos'] = 0;
 					$cache_item['last_affected_rows()'] = mysql_num_rows($res);
-					if(isset($data_tracking['result_cache']))
-						$cursor_vars['stmt_result_rows'] =& $data_tracking['result_cache'];
+// 					if(isset($data_tracking['result_cache']))
+// 						$data_tracking['result_cache'] =& $data_tracking['result_cache'];
 				}
 				break;
 			case 'resource/odbc-link':
 				$res = odbc_prepare($db, $sql_query);
 				if(empty($res)) {
-					trigger_error("UniPath: __cursor_database: ODBC Prepare: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db))." ($sql_query)";
+					trigger_error("UniPath.__cursor_database($cursor_cmd): ODBC Prepare: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db))." ($sql_query)";
 					$cache_item['last_error()'] = array(odbc_error($db), odbc_errormsg($db));
 				} else {
 // if(!empty($GLOBALS['unipath_debug_sql'])) {
@@ -2843,56 +3160,53 @@ var_dump((isset($tree[$lv]['name'])?$tree[$lv]['name']:'?')." -- ".__FUNCTION__.
 					}
 // }
 					if($res and !$res_execute_result) {
-						trigger_error("UniPath: __cursor_database: ODBC Execute: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db))." ($sql_query)";
+						trigger_error("UniPath.__cursor_database($cursor_cmd): ODBC Execute: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db))." ($sql_query)";
 						$cache_item['last_error()'] = array(odbc_error($db), odbc_errormsg($db));
 					} else {
-						$cursor_vars['stmt'] = $res;
-						$cursor_vars['current_pos'] = 0;
+						$data_tracking['stmt'] = $res;
+						$data_tracking['current_pos'] = 0;
 						$cache_item['last_affected_rows()'] = odbc_num_rows($res);
-						if(isset($data_tracking['result_cache']))
-							$cursor_vars['stmt_result_rows'] =& $data_tracking['result_cache'];
+// 						if(isset($data_tracking['result_cache']))
+// 							$data_tracking['result_cache'] =& $data_tracking['result_cache'];
 					}
 				} 
 				break;
 			default:
-				trigger_error("UniPath: __cursor_database: Didn`t know how-to work with '".gettype($db)."' of type '".(is_resource($db)?get_resource_type($db):(is_object($db)?get_class($db):'unknown'))."'");
+				trigger_error("UniPath.__cursor_database($cursor_cmd): Don`t know how-to work with '".gettype($db)."' of type '".(is_resource($db)?get_resource_type($db):(is_object($db)?get_class($db):'unknown'))."'");
 			}
-			return array(true, 'cursor_vars' => $cursor_vars);
+			return true;
 		} 
 		
 		// запрос уже выполнен, данные выгружены, ресурс освобждён
-		elseif(is_null($cursor_vars['stmt'])) {
-// var_dump('Second rewind');
-			if(isset($cursor_vars['stmt_result_rows']) and is_array($cursor_vars['stmt_result_rows'])) {
-// 				reset($cursor_vars['stmt_result_rows']);
-				$cursor_vars['current_pos'] = 0;
-				return array(true, 'cursor_vars' => $cursor_vars);
+		elseif(is_null($data_tracking['stmt'])) {
+if(!empty($GLOBALS['unipath_debug'])) var_dump('Second rewind');
+			if(isset($data_tracking['result_cache']) and is_array($data_tracking['result_cache'])) {
+// 				reset($data_tracking['result_cache']['stmt_result_rows']);
+				$data_tracking['current_pos'] = 0;
+				return true;
 			} else {
-				trigger_error("UniPath: __cursor_database: stmt_result_rows is not set or not array!", E_USER_NOTICE);
-				return array(false, 'cursor_vars' => $cursor_vars);
+				trigger_error("UniPath.__cursor_database($cursor_cmd): stmt_result_rows is not set or not array!", E_USER_NOTICE);
+				return false;
 			}
 		} 
 		
 		// запрос не смог нормально выполниться?
-		elseif($cursor_vars['stmt'] == false) {
-// var_dump("stmt = ", $tree[$lv]['data_tracking']['cursor_vars']['stmt']);
-			return array(false, 'cursor_vars' => $cursor_vars);
+		elseif($data_tracking['stmt'] == false) {
+if(!empty($GLOBALS['unipath_debug'])) var_dump("stmt = ", $tree[$lv]['data_tracking']['stmt']);
+			return false;
 		} 
 		
 		// не все данные выгружены, а нас просят перемотать - перемотаем выгруженные тогда
-		elseif(!empty($cursor_vars['stmt']) and !empty($cursor_vars['stmt_result_rows'])) {
-			$cursor_vars['current_pos'] = 0;
-			return array(true, 'cursor_vars' => $cursor_vars);
+		elseif(!empty($data_tracking['stmt']) and !empty($data_tracking['result_cache'])) {
+if(!empty($GLOBALS['unipath_debug'])) var_dump('Rewind result_cache');
+			$data_tracking['current_pos'] = 0;
+			return true;
 		}
 		
-		// данные похоже ещё не выгружали (?)
-// 		elseif(!empty($cursor_vars['stmt']) and empty($cursor_vars['stmt_result_rows'])) {
-// 			return array(true, 'cursor_vars' => $cursor_vars);
-// 		}
-		
 		else {
-			var_dump("UniPath: __cursor_database($cursor_cmd): Unknown what to do... ", $cursor_vars);
-			trigger_error("UniPath: __cursor_database($cursor_cmd): Unknown what to do ???");
+			var_dump("UniPath.__cursor_database($cursor_cmd): Unknown what to do... ", $data_tracking);
+			trigger_error("UniPath.__cursor_database($cursor_cmd): Unknown what to do ???");
+			return false;
 		}
 	}
 
@@ -2900,27 +3214,26 @@ var_dump((isset($tree[$lv]['name'])?$tree[$lv]['name']:'?')." -- ".__FUNCTION__.
 	if($cursor_cmd == 'next') {
 // var_dump($tree[$lv]);
 
-		if(array_key_exists('stmt', $cursor_vars) == false) 
-			trigger_error("UniPath: __cursor_database: SQL Query not executed! Do rewind at first ({$data_tracking['sql_query']})", E_USER_NOTICE);
+		if(array_key_exists('stmt', $data_tracking) == false) 
+			trigger_error('UniPath.'.__FUNCTION__.": SQL Query not executed! Do rewind at first ({$data_tracking['sql_query']})", E_USER_NOTICE);
 			
-if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.": start \$cursor_vars = ", $cursor_vars);
-
-		// STMT_RESULT_ROWS - сначало вытаскиваем из кеша уже выгруженных строк
-		if(isset($cursor_vars['stmt_result_rows']) && is_array($cursor_vars['stmt_result_rows'])
-		&& count($cursor_vars['stmt_result_rows']) > $cursor_vars['current_pos']) {
+		// RESULT_CACHE - сначало вытаскиваем из кеша уже выгруженных строк
+		if(isset($data_tracking['result_cache']) && is_array($data_tracking['result_cache'])
+		&& count($data_tracking['result_cache']) > $data_tracking['current_pos']) {
 			
 			// текущая позиция в кеше
-			$pos = isset($cursor_vars['current_pos']) ? $cursor_vars['current_pos'] : 0;
+			$pos = isset($data_tracking['current_pos']) ? $data_tracking['current_pos'] : 0;
 			
 			$result = array(
 				'data_type' => 'array/db-rows',
 				'data_tracking' => array(
+					'preserve_keys' => false, // ненадо сохранять значения ключей
 					'each_data_tracking' => $__uni_assign_mode ? array() : null));
 			
 			// начнём вытаскивать строки из кеша
 			for($i = 0; $i <= intval($cursor_arg1); $i++) {
-				if(isset($cursor_vars['stmt_result_rows'][$pos])) {
-					$result[$pos] = $cursor_vars['stmt_result_rows'][$pos];
+				if(isset($data_tracking['result_cache'][$pos])) {
+					$result[$pos] = $data_tracking['result_cache'][$pos];
 					
 					// в режиме пресвоения, сохраним дополнительную информацию
 					if($__uni_assign_mode)
@@ -2928,7 +3241,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.": start \$cursor_va
 							'key()' => $pos, 'pos()' => $pos, 
 							'cursor()' => __FUNCTION__);
 						
-					$cursor_vars['current_pos'] = ++$pos;
+					$data_tracking['current_pos'] = ++$pos;
 				} else
 					break;
 			}
@@ -2942,6 +3255,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.": start \$cursor_va
 						? $result['data_tracking']['each_data_tracking'][$pos-1]
 						: array(
 							'key()' => $pos-1, 'pos()' => $pos-1,
+							'preserve_keys' => false, // ненадо сохранять значения ключей
 							'cursor()' => __FUNCTION__,
 							'db' => &$data_tracking['db'],
 							'where' => &$data_tracking['where'],
@@ -2950,13 +3264,13 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.": start \$cursor_va
 				);
 			} 
 			elseif(count($result) < 3)
-				return array('cursor_vars' => $cursor_vars);
+				return array();
 				
-			return array_merge($result, array('cursor_vars' => $cursor_vars));
+			return $result;
 		} 
 		
 		// STMT - если результат есть, выбераем следующую строку результата
-		if(!empty($cursor_vars['stmt'])) {
+		if(!empty($data_tracking['stmt'])) {
 			$result = array(
 				'data_type' => 'array/db-rows',
 				'data_tracking' => array(
@@ -2965,34 +3279,34 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.": start \$cursor_va
 			for($i = 0; $i <= intval($cursor_arg1); $i++) {
 			
 				// все строки выбраны и запрос уничтожен - прекращаем выберать строки
-				if($cursor_vars['stmt'] === false or is_null($cursor_vars['stmt'])) 
+				if($data_tracking['stmt'] === false or is_null($data_tracking['stmt'])) 
 					break;
 
 				switch($data_tracking['db_type']) {
 					case 'object/PDO':
-						$row = $cursor_vars['stmt']->fetch(PDO::FETCH_ASSOC);
+						$row = $data_tracking['stmt']->fetch(PDO::FETCH_ASSOC);
 
 						// закончились строки, закрываем и освобождаем
 						if($row == false) {
-							$cursor_vars['stmt']->closeCursor();
-							$cursor_vars['stmt'] = null;
-if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.': cursor_vars[stmt] = ', $cursor_vars['stmt']);
+							$data_tracking['stmt']->closeCursor();
+							$data_tracking['stmt'] = null;
+if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.': data_tracking[stmt] = ', $data_tracking['stmt']);
 						} 
 						break;
 					case 'resource/mysql-link':
-						$row = mysql_fetch_assoc($cursor_vars['stmt']);
+						$row = mysql_fetch_assoc($data_tracking['stmt']);
 						// закончились строки, закрываем и освобождаем
 						if($row == false) {
-							mysql_free_result($cursor_vars['stmt']);
-							$cursor_vars['stmt'] = null;
+							mysql_free_result($data_tracking['stmt']);
+							$data_tracking['stmt'] = null;
 						}
 						break;
 					case 'resource/odbc-link':
-						$row = odbc_fetch_array($cursor_vars['stmt']);
+						$row = odbc_fetch_array($data_tracking['stmt']);
 						// закончились строки, закрываем и освобождаем
 						if($row == false) {
-							odbc_free_result($cursor_vars['stmt']);
-							$cursor_vars['stmt'] = null;
+							odbc_free_result($data_tracking['stmt']);
+							$data_tracking['stmt'] = null;
 						}
 						break;
 					default:
@@ -3002,29 +3316,29 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.': cursor_vars[stmt]
 				// если есть строка, добавляем к себе
 				if($row != false) {
 				
-					$result[$cursor_vars['current_pos']] = $row;
+					$result[$data_tracking['current_pos']] = $row;
 					
-					if(isset($cursor_vars['stmt_result_rows']))
-						$cursor_vars['stmt_result_rows'][] = $row;
+					if(isset($data_tracking['result_cache']))
+						$data_tracking['result_cache'][] = $row;
 					
 					// в режиме пресвоения, сохраним дополнительную информацию
 					if($__uni_assign_mode)
-						$result['data_tracking']['each_data_tracking'][$cursor_vars['current_pos']] = array(
-							'key()' => $cursor_vars['current_pos'], 
-							'pos()' => $cursor_vars['current_pos'], 
+						$result['data_tracking']['each_data_tracking'][$data_tracking['current_pos']] = array(
+							'key()' => $data_tracking['current_pos'], 
+							'pos()' => $data_tracking['current_pos'], 
 							'cursor()' => __FUNCTION__,
 							'db' => &$data_tracking['db'],
 							'where' => &$data_tracking['where'],
 							'columns' => &$data_tracking['columns'],
 							'tables' => &$data_tracking['tables']);
 							
-					$cursor_vars['current_pos']++;
+					$data_tracking['current_pos']++;
 				}
 			}
 			
 			// список из 1 элемента превратим в просто один элемент
 			if(count($result) == 3) {
-				$pos = $cursor_vars['current_pos'];
+				$pos = $data_tracking['current_pos'];
 				$result = array(
 					'data' => $result[$pos-1], 
 					'data_type' => 'array/db-row', 
@@ -3034,28 +3348,29 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.': cursor_vars[stmt]
 					);
 			} 
 			elseif(count($result) < 3)
-				return array('cursor_vars' => $cursor_vars);
+				return array();
 			
 // var_dump("result *** ", array_merge($result, array('cursor_vars' => $cursor_vars)));
-			return array_merge($result, array('cursor_vars' => $cursor_vars));
+			return array_merge($result);
 		}
 		
 		// все строки уже были выгружены из результата и запрос закрыт
-		elseif(is_null($cursor_vars['stmt'])) {
-			return array('cursor_vars' => $cursor_vars);
+		elseif(is_null($data_tracking['stmt'])) {
+if(!empty($GLOBALS['unipath_debug'])) var_dump('UniPath.'.__FUNCTION__.": result_set ended. smt == null.");
+			return array();
 		}
 		
 		// запрос был неудачный и выгружать из него невозможно
-		elseif($cursor_vars['stmt'] === false) {
+		elseif($data_tracking['stmt'] === false) {
 			trigger_error('UniPath: __cursor_database: Result set == false!');
-			return array('cursor_vars' => $cursor_vars);
+			return array();
 		}
 		
 		// что-то не так
 		else {
 			trigger_error('UniPath: __cursor_database: nothing to return!');
-var_dump(__FUNCTION__.'.cursor_vars = ', $cursor_vars);
-			return array('cursor_vars' => $cursor_vars);
+var_dump(__FUNCTION__.'.data_tracking = ', $data_tracking);
+			return array();
 		}
 	}
 	
@@ -3131,6 +3446,7 @@ var_dump(__FUNCTION__.'.cursor_vars = ', $cursor_vars);
 		}
 	}
 	
+	trigger_error("UniPath.__cursor_database($cursor_cmd): Unknown cursor command!", E_USER_ERROR);
 	return null;
 }
 
@@ -3172,13 +3488,16 @@ function __cursor_database_set($tree, $lv, $set_value, $cursor_arg1_data_type = 
 			$names_and_values[$col_names[$key]] = $val;
 		} else
 			$names_and_values[$key] = $val;
+	else
+		trigger_error('UniPath.__cursor_database_set: Unknown data_type! ('.$data_type.')', E_USER_ERROR);
 
 	// формируем UPDATE SET ...
 	$sql_upd = array();
 	foreach($names_and_values as $name => $set_value) {
 
 		$columns = $data_tracking['columns'];
-		
+		$first_table = current($data_tracking['tables']);
+
 		// если нет колонок, то используем ключи из присвояемого массива
 		foreach($names_and_values as $col_name => $unused)
 			// если использовались алиасы
@@ -3187,7 +3506,7 @@ function __cursor_database_set($tree, $lv, $set_value, $cursor_arg1_data_type = 
 				$columns[$data_tracking['tables'][0].".".$col_name] = '';
 			} 
 			else */ if(strpos($col_name, '.') === false)
-				$columns[$data_tracking['tables'][0].".".$col_name] = '';
+				$columns[$first_table.".".$col_name] = '';
 			else
 				$columns[$col_name] = '';
 
@@ -3282,7 +3601,7 @@ function __cursor_database_set($tree, $lv, $set_value, $cursor_arg1_data_type = 
 			assert('is_array($row)') or var_dump('not array -> ', $row);
 			
 			// соберём where для выбранной строки
-			$sql_where = [];
+			$sql_where = array();
 			foreach($row as $col_name => $val) {
 				// числовые не экранируем
 				if(is_numeric($val))
@@ -3395,10 +3714,18 @@ if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === '
 				}
 				break;
 			default:
-				trigger_error("UniPath: ".__FUNCTION__.": Didn`t know how-to work with $db_type");
+				trigger_error("UniPath: ".__FUNCTION__.": Don`t know how-to work with $db_type");
 		}
 	}
 if(function_exists('mark')) mark("database_set(UPDATE)");
+}
+
+function _uni_sql_table_prefix($tree, $lv) {
+	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
+	
+	$tree[$lv-1]['data_tracking']['table_prefix'] = $args[0];
+
+	return array('data' => $tree[$lv-1]['data'], 'data_type' => $tree[$lv-1]['data_type'], 'data_tracking' => $tree[$lv-1]['data_tracking']);
 }
 
 function _uni_last_affected_rows($tree, $lv = 0) { return _uni_last_error($tree, $lv); }
@@ -3424,6 +3751,7 @@ function _uni_last_error($tree, $lv = 0) {
 	return $result;
 }
 
+function _uni_new($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) { return _uni_new_row($tree, $lv); }
 function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 // var_dump($tree[$lv]['name']." -- $cursor_cmd");
 
@@ -3549,6 +3877,120 @@ if(!empty($GLOBALS['unipath_debug_sql'])) var_dump("\$stmt = ".print_r($stmt, tr
 	}
 }
 
+function _uni_delete($tree, $lv = 0) {
+	assert('isset($tree[$lv-1]["data_tracking"])');
+	assert('isset($tree[$lv-1]["data_tracking"]["db"])');
+	assert('isset($tree[$lv-1]["data_tracking"]["tables"])');
+	assert('isset($tree[$lv-1]["data_tracking"]["where"])');
+	
+	$data_type = $tree[$lv-1]['data_type'];
+	$data_tracking = $tree[$lv-1]['data_tracking'];
+	$db = $data_tracking['db'];
+	$db_type = is_resource($db) 
+			? 'resource/'.str_replace(' ', '-', get_resource_type($db))
+			: (is_object($db) ? 'object/'.get_class($db) : gettype($db));
+	
+	// промежуточные результаты хранятся в кеше
+	isset($GLOBALS['__cursor_database']) or $GLOBALS['__cursor_database'] = array();
+	foreach($GLOBALS['__cursor_database'] as $num => $item) 
+		if($item['db'] == $db) 
+			$cache_item =& $GLOBALS['__cursor_database'][$num];
+	if(!isset($cache_item)) {
+		$GLOBALS['__cursor_database'][] = array('db' => $db);
+		$cache_item =& $GLOBALS['__cursor_database'][count($GLOBALS['__cursor_database']) - 1];
+	}
+
+	$table = current($data_tracking['tables']);
+	$table_prefix = "$table.";
+	$sql = "";
+	foreach($data_tracking['where'] as $col_name => $val) {
+	
+		// если поле относится к нашей таблице, то добавляем к нашему WHERE
+		if(strpos($col_name, $table_prefix) === 0 or strpos($col_name, '.') === false) {
+		
+			/* ! правая часть уже экранирована ! */
+			if($col_name[0] == '-')
+				$sql .= empty($sql) ? $val : " AND $val";
+			else
+				$sql .= empty($sql) ? "$col_name $val" : " AND $col_name $val";
+		}
+	}
+	$sql = "DELETE FROM $table WHERE $sql";
+	
+	$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = null;
+	$cache_item['last_error()'] = $cache_item["last_error($table)"] = null;
+	
+	// в зависимости от типа соединения с базой выполним
+	switch($db_type) {
+		case 'object/PDO':
+			$res = $db->prepare($sql);
+if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate') {
+			$res_execute_result = false;
+} else {
+			if($res) $res_execute_result = $res->execute(array());
+}
+if(!empty($GLOBALS['unipath_debug_sql']) and !is_array($GLOBALS['unipath_debug_sql'])) var_dump("\$res = ".print_r($res, true).", \$res_execute_result = ".(isset($res_execute_result)?$res_execute_result:'undefined').", rowCount = ".(is_object($res) ? $res->rowCount(): 'NULL'));
+			// сообщим об ошибке в запросе
+			if(!$res or isset($res_execute_result) and !$res_execute_result) {
+				$err_info = $db->errorInfo();
+
+				if($err_info[0] == '00000' and isset($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate')
+					/* skip ??? */
+					trigger_error("UniPath.".__FUNCTION__.": PDO: unipath_debug_sql = simulate! ($sql)", E_USER_NOTICE);
+				elseif($err_info[0] == '00000')
+					trigger_error("UniPath.".__FUNCTION__.": PDO: execute() return false! ($sql)", E_USER_NOTICE);
+				else
+					trigger_error("UniPath.".__FUNCTION__.": PDO: ".implode(';',$err_info)." ($sql)", E_USER_NOTICE);
+					
+				$cache_item['last_error()'] = $cache_item["last_error($table)"] = $err_info;
+			} else {
+				$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = $res->rowCount();
+			}
+			break;
+		case 'resource/odbc-link':
+			$res = odbc_prepare($db, $sql);
+			if(empty($res)) {
+				trigger_error("UniPath.".__FUNCTION__.": ODBC Prepare: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
+				$cache_item['last_error()'] = $cache_item["last_error($table)"] = array(odbc_error($db), odbc_errormsg($db));
+				break;
+			} 
+			
+if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate') {
+			$res_execute_result = false;
+} else {
+			if($res) { 
+				odbc_setoption($res, 2, 0, 15); // time-out
+				$res_execute_result = odbc_execute($res, $sql_binds);
+			}
+}
+			if(isset($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate')
+				/* skip ??? */
+				trigger_error("UniPath.".__FUNCTION__.": ODBC: unipath_debug_sql = simulate! ($sql)", E_USER_NOTICE);
+			elseif($res and !$res_execute_result) {
+				trigger_error("UniPath.".__FUNCTION__.": ODBC Execute: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
+				$cache_item['last_error()'] = $cache_item["last_error($table)"] = array(odbc_error($db), odbc_errormsg($db));
+			} else {
+				$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = odbc_num_rows($res);
+			}
+			break;
+		case 'resource/mysql-link':
+			$stmt = mysql_query($sql, $db);
+			if(empty($stmt)) {
+				trigger_error("UniPath.".__FUNCTION__.": MySQL Query: mysql_errno=".mysql_errno($db).", mysql_error=".mysql_error($db)." ($sql)");
+				$cache_item['last_error()'] = array(mysql_errno($db), mysql_error($db));
+			} else {
+				$cache_item['last_affected_rows()'] = mysql_affected_rows($db);
+			}
+			break;
+		default:
+			trigger_error("UniPath.".__FUNCTION__.": Don`t know how-to work with $db_type");
+	}
+
+if(!empty($GLOBALS['unipath_debug'])) var_dump($sql, $cache_item["last_error($table)"]);
+	
+	return array('data' => $tree[$lv-1]['data'], 'data_type' => $data_type, 'data_tracking' => $data_tracking);
+}
+
 function _uni_insert_into($tree, $lv = 0) {
 	if(isset($tree[$lv-1]['data']) and is_array($tree[$lv-1]['data'])) {
 		list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
@@ -3646,21 +4088,21 @@ function _cursor_assertEqu($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = nu
 	
 }
 
+function _uni_cached($tree, $lv) { return _uni_cache($tree, $lv); }
 function _uni_cache($tree, $lv = 0) {
 	global $GLOBALS_data_types, $GLOBALS_data_tracking, $GLOBALS_data_timestamp;
 
-	$name = $tree[$lv]['name'];
 	$result = array('data' => null, 'data_type' => 'null');
 	
-	list($args, $args_types) = __uni_parseFuncArgs($name);
+	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
 	$arg1 = $args[0];
 	$arg1_type = $args_types[0];
-	$lifetime = isset($args['lifetime']) ? $args['lifetime'] : 60*10;
+	if($arg1_type == 'string') $arg1 = '/'.$arg1; // временно, для совместимости со старым кодом
+	
+	$lifetime = isset($args['lifetime']) ? $args['lifetime'] : 2147483647;
 
-	// временно, для совместимости со старым кодом
-	if($arg1_type == 'string') $arg1 = '/'.$arg1;
 // var_dump("cache key = ".$arg1);
-	// cache(/var1)
+	/* --------  cache(/var1) ---------- */
 	if(sscanf($arg1, '%[/$]%[qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_0123456789]', $first_char, $var_name) == 2 and strlen($arg1) == strlen($var_name)+1) {
 
 		// save
@@ -3669,65 +4111,145 @@ function _uni_cache($tree, $lv = 0) {
 			$GLOBALS[$var_name] = $result['data'] = $tree[$lv-1]['data'];
 			$GLOBALS_data_types[$var_name] = $result['data_type'] = $tree[$lv-1]['data_type'];
 			$GLOBALS_data_timestamp[$var_name] = time();
-			if(array_key_exists('data_tracking', $tree[$lv-1]))
-				$GLOBALS_data_tracking[$var_name] = $result['data_tracking'] = & $tree[$lv-1]['data_tracking'];
+			if(array_key_exists('data_tracking', $tree[$lv-1])) {
+				$result['data_tracking'] = & $tree[$lv-1]['data_tracking'];
+				$GLOBALS_data_tracking[$var_name] = & $tree[$lv-1]['data_tracking'];
+			}
 		} 
+		
+		// save+restore
+		// если ничего ещё небыло закешировано и указан 2ой аргумент, то закешируем его
+		elseif(!isset($GLOBALS[$var_name]) and isset($args[1])) {
+			if($args_types[1] == 'unipath') {
+				$uni_result = __uni_with_start_data($tree[$lv-1]['data'], $tree[$lv-1]['data_type'], isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null, $args[1]);
+				$result['data'] = $GLOBALS[$var_name] = $uni_result['data'];
+				$GLOBALS_data_types[$var_name] = $result['data_type'] = $uni_result['data_type'];
+				$GLOBALS_data_timestamp[$var_name] = time();
+				if(array_key_exists('data_tracking', $uni_result)) {
+					$result['data_tracking'] = $uni_result['data_tracking'];
+					$GLOBALS_data_tracking[$var_name] = $uni_result['data_tracking'];
+				}
+			}
+			else {
+				$result['data'] = $GLOBALS[$var_name] = $args[2];
+				$GLOBALS_data_types[$var_name] = $result['data_type'] = gettype($args[2]);
+			}
+		}
+			
 		// restore
 		else {
 // var_dump('restore from cache - '.$var_name);
-// 			if(isset($uni_cache_data[$arg1]) or $arg1[0] == '$') {
-				$result['data'] = isset($GLOBALS[$var_name]) ? $GLOBALS[$var_name] : null;
-				$result['data_type'] = $GLOBALS_data_types[$var_name];
-				if(array_key_exists($var_name, $GLOBALS_data_tracking))
-					$result['data_tracking'] = $GLOBALS_data_tracking[$var_name];
-			} 
-// 			else {
-// 				trigger_error("UniPath: \$uni_cache_data[".ltrim($arg1, '$')."] not set!");
-// 				$result['data'] = null;
-// 				$result['data_type'] = 'null';
-// 			}
-		}
-// 	} 
-	
-	// cache(/.../...) - json_encode/json_decode
-	else {
-		// save
-		if($lv > 0 and $tree[$lv-1]['name'] != '?start_data?') {
-// var_dump('save to cache - uni('.$arg1.', ...)');
-			__uni_with_start_data($tree[$lv-1]['data'], $tree[$lv-1]['data_type'], $tree[$lv-1]['data_tracking'], $arg1, json_encode($tree[$lv-1]+array('cache_timestamp' => time())));
-			$result['data'] = $tree[$lv-1]['data'];
-			$result['data_type'] = $tree[$lv-1]['data_type'];
-			if(array_key_exists('data_tracking', $tree[$lv-1]))
-				$result['data_tracking'] = $tree[$lv-1]['data_tracking'];
-		} 
-		// restore
-		else {
-			$json_string = uni($arg1);
-// var_dump('restore from cache - uni('.$arg1.')', $json_string);
-			if(is_string($json_string)) {
-				$json_string = json_decode($json_string, true);
+			$result['data'] = isset($GLOBALS[$var_name]) ? $GLOBALS[$var_name] : null;
+			$result['data_type'] = empty($GLOBALS_data_types[$var_name]) ? gettype($result['data']) : $GLOBALS_data_types[$var_name];
+			if(array_key_exists($var_name, $GLOBALS_data_tracking))
+				$result['data_tracking'] = & $GLOBALS_data_tracking[$var_name];
 				
-				// проверим валидность и lifetime
-				if(is_array($json_string)) {
-					if(isset($json_string['cache_timestamp'])
-					and $json_string['cache_timestamp'] < time() - $lifetime/* and strpos($_SERVER['HTTP_HOST'], '.loc') === false*/) {
-						$result['data'] = null;
-						$result['data_type'] = 'null';
-					} else
-						$result = array_merge($result, $json_string);
-				}
-			}
-
-			// либо раскодировать не удалось, либо простые данные...
-			if(!is_array($json_string)) {
-				$result['data'] = $json_string;
-				$result['data_type'] = gettype($json_string);
-				if($lv > 0 and array_key_exists('data_tracking', $tree[$lv-1]))
-					$result['data_tracking'] = $tree[$lv-1]['data_tracking'];
+			// проверим lifetime
+			if(isset($GLOBALS_data_timestamp[$var_name])
+				and $GLOBALS_data_timestamp[$var_name] < time() - $lifetime
+				/* and strpos($_SERVER['HTTP_HOST'], '.loc') === false*/) {
+				$result['data'] = null;
+				$result['data_type'] = 'null';
 			}
 		}
-	};
+		
+		return $result;
+ 	} 
 	
+	/* ---------- cache(/.../...) - json_encode/json_decode ---------- */
+	// save
+	if($lv > 0 and $tree[$lv-1]['name'] != '?start_data?') {
+// var_dump("save to cache - uni({$arg1}, ...)");
+		__uni_with_start_data($tree[$lv-1]['data'], $tree[$lv-1]['data_type'], $tree[$lv-1]['data_tracking'], $arg1, json_encode($tree[$lv-1]+array('cache_timestamp' => time())));
+		$result['data'] = $tree[$lv-1]['data'];
+		$result['data_type'] = $tree[$lv-1]['data_type'];
+		if(array_key_exists('data_tracking', $tree[$lv-1]))
+			$result['data_tracking'] = $tree[$lv-1]['data_tracking'];
+	} 
+	
+	// restore
+	else {
+		$cached_data = __uni_with_start_data(
+			$tree[$lv-1]['data'], $tree[$lv-1]['data_type'], 
+			isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null,
+			$arg1);
+		
+		// если ничего ещё небыло закешировано и указан 2ой аргумент, то закешируем его
+		if(!isset($cached_data['data']) and isset($args[1])) {
+			$uni_result_for_caching = __uni_with_start_data(
+				$tree[$lv-1]['data'], 
+				$tree[$lv-1]['data_type'], 
+				isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null,
+				$args[1]);
+			$result = __uni_with_start_data(
+				$tree[$lv-1]['data'], 
+				$tree[$lv-1]['data_type'], 
+				isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null, 
+				$arg1,
+				json_encode($uni_result_for_caching + array('cache_timestamp' => time())));
+		}
+		
+// var_dump("restore from cache - uni({$arg1})", $json_string);
+		if(is_string($cached_data['data'])) {
+			$json_string = json_decode($cached_data['data'], true);
+			
+			// проверим валидность и lifetime
+			if(is_array($json_string)) {
+				if(isset($json_string['cache_timestamp'])
+				and $json_string['cache_timestamp'] < time() - $lifetime
+				/* and strpos($_SERVER['HTTP_HOST'], '.loc') === false*/) {
+					$result['data'] = null;
+					$result['data_type'] = 'null';
+				} else
+					$result = array_merge($result, $json_string);
+			}
+		}
+
+		// либо раскодировать не удалось, либо простые данные...
+		if(!is_array($json_string)) {
+			$result['data'] = $json_string;
+			$result['data_type'] = gettype($json_string);
+// 			if($lv > 0 and array_key_exists('data_tracking', $tree[$lv-1]))
+// 				$result['data_tracking'] = $tree[$lv-1]['data_tracking'];
+		}
+	}
+	
+	// возвращаем что получилось
+	return $result;
+}
+
+function _uni_if($tree, $lv = 0) {
+	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
+if(!empty($GLOBALS['unipath_debug'])) var_dump("if start_data --- ", $tree[$lv-1]['data']);
+	if($args_types[0] == 'unipath') {
+		$arg1 = __uni_with_start_data(
+			$tree[$lv-1]['data'], $tree[$lv-1]['data_type'],
+			isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null,
+			$args[0]);
+		$arg1 = (bool) $arg1['data'];
+	} else
+		$arg1 = (bool) $args[0];
+if(!empty($GLOBALS['unipath_debug'])) var_dump("--- if($arg1):", $args, $args_types, '---');
+	// TRUE
+	if($arg1 and $args_types[1] == 'unipath')
+		$result = __uni_with_start_data(
+			$tree[$lv-1]['data'], $tree[$lv-1]['data_type'],
+			isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null,
+			$args[1]);
+	elseif($arg1 and $args_types[1] != 'unipath')
+		$result = array('data' => $args[1], gettype($args[1]));
+
+	// FALSE
+	elseif(!$arg1 and isset($args_types[2]) and $args_types[2] == 'unipath')
+		$result = __uni_with_start_data(
+			$tree[$lv-1]['data'], $tree[$lv-1]['data_type'],
+			isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null,
+			$args[2]);
+	elseif(!$arg1 and isset($args_types[2]) and $args_types[2] != 'unipath')
+		$result = array('data' => $args[2], gettype($args[2]));
+	else
+		$result = array('data' => null, 'data_type' => 'null');
+
 	return $result;
 }
 
@@ -3865,12 +4387,6 @@ function _uni_replace($tree, $lv = 0) {
 			
 			$call_result = call_user_func($data_tracking['cursor()'], $tree, $lv-1, 'next', 10);
 			
-			// промежуточные переменные курсора перенесём в предыдущий data_tracking
-			if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-				$tree[$lv-1]['data_tracking']['cursor_vars'] = $call_result['cursor_vars'];
-				unset($call_result['cursor_vars']);
-			}
-			
 			// если ответ это одна запись, то преобразуем в массив с одной записьмю
 			if(is_array($call_result) and isset($call_result['data'], $call_result['data_type'])) {
 				$data = array($pos => $call_result['data']);
@@ -3967,13 +4483,7 @@ function _uni_toHash($tree, $lv = 0) {
 			$result['data_tracking'] = $tree[$lv-1]['data_tracking']; */
 	
 		// REWIND - перематаем в начало
-		$call_result = call_user_func($data_tracking['cursor()'], $tree, $lv-1, 'rewind');
-
-		// промежуточные переменные курсора перенесём в предыдущий data_tracking
-		if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-			$data_tracking['cursor_vars'] = $call_result['cursor_vars'];
-			unset($call_result['cursor_vars']);
-		}
+		$call_result = call_user_func_array($data_tracking['cursor()'], array(&$tree, $lv-1, 'rewind'));
 		
 		global $__uni_prt_cnt;
 		for($prt_cnt = 0; $prt_cnt < $__uni_prt_cnt; $prt_cnt++) {
@@ -3981,13 +4491,8 @@ function _uni_toHash($tree, $lv = 0) {
 			// постепенно наращиваем лимит запрашиваемых порций
 			$next_limit = $next_limit < 20 ? $next_limit+1 : ($next_limit < 150 ? $next_limit+10 : 1000);
 			
-			$call_result = call_user_func($data_tracking['cursor()'], $tree, $lv-1, 'next', $next_limit);
+			$call_result = call_user_func_array($data_tracking['cursor()'], array(&$tree, $lv-1, 'next', $next_limit));
 // var_dump($call_result); exit;
-			// промежуточные переменные курсора перенесём в предыдущий data_tracking
-			if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-				$data_tracking['cursor_vars'] = $call_result['cursor_vars'];
-				unset($call_result['cursor_vars']);
-			}
 			
 			// если ответ это одна запись, то преобразуем в массив с одной записьмю
 			if(is_array($call_result) and isset($call_result['data'])) {
@@ -4376,20 +4881,11 @@ function _uni_first($tree, $lv = 0) {
 		$data_tracking = & $tree[$lv-1]['data_tracking'];
 	
 		// 1) перед запросом первого элемента, перемотаем в начало - REWIND
-		$call_result = call_user_func($data_tracking['cursor()'], $tree, $lv-1, 'rewind');
-
-		// промежуточные переменные курсора перенесём в data_tracking[cursor_vars]
-		if(is_array($call_result) and array_key_exists('cursor_vars', $call_result))
-			$data_tracking['cursor_vars'] = $call_result['cursor_vars'];
+		$call_result = call_user_func_array($data_tracking['cursor()'], array(&$tree, $lv-1, 'rewind'));
 	
 		// 2) запросим первый элемент - NEXT
-		$call_result = call_user_func($data_tracking['cursor()'], $tree, $lv-1, 'next');
+		$call_result = call_user_func_array($data_tracking['cursor()'], array(&$tree, $lv-1, 'next'));
 // var_dump($call_result);
-		// промежуточные переменные курсора перенесём в data_tracking[cursor_vars]
-		if(is_array($call_result) and array_key_exists('cursor_vars', $call_result)) {
-			$data_tracking['cursor_vars'] = $call_result['cursor_vars'];
-// 			unset($call_result['cursor_vars']);
-		}
 		
 		// 3) вернём первый элемент или false/empty_array()
 		return array(
@@ -4420,15 +4916,61 @@ function _uni_first($tree, $lv = 0) {
 	return $result;
 }
 
+function _uni_regexp($tree, $lv = 0) {
+	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
+	if(empty($args[0]))
+		return array('data' => false);
+	elseif($args_types[0] == 'unipath') {
+		$arg1 = __uni_with_start_data(
+			$tree[$lv-1]['data'], 
+			$tree[$lv-1]['data_type'], 
+			isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null, 
+			$args[0]);
+		$arg1 = strval($arg1['data']);
+	} else
+		$arg1 = $args[0];
+		
+	if(preg_match("~$arg1~ui", $tree[$lv-1]['data'], $matches)) 
+		return array('data' => $matches, 'data_type' => 'array');
+	else
+		return array('data' => null, 'data_type' => 'null');
+}
+
+function _uni_regexp_all($tree, $lv = 0) {
+	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
+	if(empty($args[0]))
+		return array('data' => false);
+	elseif($args_types[0] == 'unipath') {
+		$arg1 = __uni_with_start_data(
+			$tree[$lv-1]['data'], 
+			$tree[$lv-1]['data_type'], 
+			isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null, 
+			$args[0]);
+		$arg1 = strval($arg1['data']);
+	} else
+		$arg1 = $args[0];
+
+	if(preg_match_all("~$arg1~ui", $tree[$lv-1]['data'], $matches, PREG_SET_ORDER)) {
+// var_dump($matches);
+		return array('data' => $matches, 'data_type' => 'array');
+	} else
+		return array('data' => null, 'data_type' => 'null');
+}
+
 function _uni_regexp_match($tree, $lv = 0) {
 // print_r($tree[$lv]);
 	
 	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
 	if(empty($args[0]))
 		return array('data' => false);
-	elseif($args_types[0] == 'unipath')
-		$arg1 = strval(uni($args[0]));
-	else
+	elseif($args_types[0] == 'unipath') {
+		$arg1 = __uni_with_start_data(
+			$tree[$lv-1]['data'], 
+			$tree[$lv-1]['data_type'], 
+			isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null, 
+			$args[0]);
+		$arg1 = strval($arg1['data']);
+	} else
 		$arg1 = $args[0];
 		
 // var_dump("~$arg1~ui", $tree[$lv-1]['data'], preg_match("~$arg1~ui", $tree[$lv-1]['data']));
@@ -4445,9 +4987,14 @@ function _uni_regexp_replace($tree, $lv = 0) {
 		return array(
 			'data' => $tree[$lv-1]['data'], 
 			'data_type' => $tree[$lv-1]['data_type']);
-	elseif($args_types[0] == 'unipath')
-		$arg1 = strval(uni($args[0]));
-	else
+	elseif($args_types[0] == 'unipath') {
+		$arg1 = __uni_with_start_data(
+			$tree[$lv-1]['data'], 
+			$tree[$lv-1]['data_type'], 
+			isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data_tracking'] : null, 
+			$args[0]);
+		$arg1 = strval($arg1['data']);
+	} else
 		$arg1 = $args[0];
 
 	// есть ньюанс с регулярками и надо его обойти для удобства
@@ -4649,7 +5196,6 @@ function _uni_split($tree, $lv = 0) {
 }
 
 function _uni_join($tree, $lv = 0) {
-
 	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
 	if(!isset($args[0]))
 		$arg1 = '';
@@ -4667,27 +5213,46 @@ function _uni_wrap($tree, $lv = 0) {
 	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
 	if(!isset($args[0]))
 		$arg1 = ';';
-	elseif($args_types[0] == 'unipath')
-		$arg1 = uni($args[0]);
+	elseif($args_types[0] == 'unipath') {
+		$arg1 = __uni_with_start_data(
+			$tree[$lv-1]['data'],
+			$tree[$lv-1]['data_type'],
+			isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data'] : null,
+			$args[0]);
+		$arg1 = $arg1['data'];
+	}
 	else
 		$arg1 = $args[0];
+		
+	if(!isset($args[1]))
+		$arg2 = $arg1;
+	elseif($args_types[1] == 'unipath') {
+		$arg2 = __uni_with_start_data(
+			$tree[$lv-1]['data'],
+			$tree[$lv-1]['data_type'],
+			isset($tree[$lv-1]['data_tracking']) ? $tree[$lv-1]['data'] : null,
+			$args[1]);
+		$arg2 = $arg2['data'];
+	}
+	else
+		$arg2 = $args[1];
 	
 	$result = array('data_type' => $tree[$lv-1]['data_type']);
 	if(is_array($tree[$lv-1]['data'])) {
 		$result['data'] = array();
 		foreach($tree[$lv-1]['data'] as $key => $val)
 			if(!empty($tree[$lv-1]['data'][$key]))
-				$result['data'][$key] = $arg1.strval($tree[$lv-1]['data']).$arg1;
+				$result['data'][$key] = $arg1.strval($tree[$lv-1]['data']).$arg2;
 			else
-				$result['data'][$key] = $arg1;
+				$result['data'][$key] = count($args) == 1 ? $arg1 : '';
 	} 
 	
 	// для всех остальных типов относимся как к строкам
 	else {
 		if(!empty($tree[$lv-1]['data']))
-			$result['data'] = $arg1.strval($tree[$lv-1]['data']).$arg1;
+			$result['data'] = $arg1.strval($tree[$lv-1]['data']).$arg2;
 		else
-			$result['data'] = $arg1;
+			$result['data'] = count($args) == 1 ? $arg1 : '';
 	} 
 	
 	if(array_key_exists('data_tracking', $tree[$lv-1]))
@@ -4702,27 +5267,151 @@ function _uni_asJSON($tree, $lv = 0) {
 }
 
 function _uni_translit($tree, $lv = 0) {
-	$str = $tree[$lv-1]['data'];
+	// карта обратимого транслита (взята из http://habrahabr.ru/post/265455/)
+	$translit_ru_en = array('А' => 'A', 'Б' => 'B', 'В' => 'V', 'Г' => 'G', 'Д' => 'D', 'Е' => 'E', 'Ё' => 'JO', 'Ж' => 'ZH', 'З' => 'Z', 'И' => 'I', 'Й' => 'Y', 'К' => 'K', 'Л' => 'L', 'М' => 'M', 'Н' => 'N', 'О' => 'O', 'П' => 'P', 'Р' => 'R', 'С' => 'S', 'Т' => 'T', 'У' => 'U', 'Ф' => 'F', 'Х' => 'KH', 'Ц' => 'C', 'Ч' => 'CH', 'Ш' => 'SH', 'Щ' => 'SHH', 'Ъ' => 'JHH', 'Ы' => 'IH', 'Ь' => 'JH', 'Э' => 'EH', 'Ю' => 'JU', 'Я' => 'JA', 
+	'а' => 'a', 'б' => 'b', 'в' => 'v', 'г' => 'g', 'д' => 'd', 'е' => 'e', 'ё' => 'jo', 'ж' => 'zh', 'з' => 'z', 'и' => 'i', 'й' => 'y', 'к' => 'k', 'л' => 'l', 'м' => 'm', 'н' => 'n', 'о' => 'o', 'п' => 'p', 'р' => 'r', 'с' => 's', 'т' => 't', 'у' => 'u', 'ф' => 'f', 'х' => 'kh', 'ц' => 'c', 'ч' => 'ch', 'ш' => 'sh', 'щ' => 'shh', 'ъ' => 'jhh', 'ы' => 'ih', 'ь' => 'jh', 'э' => 'eh', 'ю' => 'ju', 'я' => 'ja', 
+	' ' => '_', '-' => '-', ',' => ',', '.' => '.', '(' => '(', ')' => ')', ';' => ';');
 
-	$ru_str = 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдеёжзийклмнопрстуфхцчшщыэюя -,'; 
-    $en_str = array('A','B','V','G','D','E','JO','ZH','Z','I','J','K','L','M','N','O','P','R','S','T',
-    'U','F','H','C','CH','SH','SHH',chr(35),'I',chr(39),'JE','JU',
-    'JA','a','b','v','g','d','e','jo','zh','z','i','j','k','l','m','n','o','p','r','s','t','u','f',
-    'h','c','ch','sh','shh','i','je','ju','ja','_','_','_');
-	$newname = '';
-	$l = mb_strlen($str, 'UTF-8');
-	for($i = 0; $i < $l; $i++) { 
+	$str = $tree[$lv-1]['data'];
+	$str_len = mb_strlen($str, 'UTF-8');
+	$result = array('data' => '', 'data_type' => 'string');
+	for($i = 0; $i < $str_len; $i++) { 
 		$char = mb_substr($str, $i, 1, 'UTF-8');
-		$n = mb_strpos($ru_str, $char, 0, 'UTF-8'); 
-		if($n !== false) 
-		$newname .= $en_str[$n];  
-		else {
-		if(preg_match('~^[_0-9a-zA-Z.]$~', $char)) 
-			$newname .= $char;
-		}
+		
+		if(isset($translit_ru_en[$char])) 
+			$result['data'] .= $translit_ru_en[$char];  
+		else 
+		if(strpos('0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM', $char) !== false) 
+			$result['data'] .= $char;
 	} 
     
-    return array('data' => $newname, 'data_type' => 'string');
+    return $result;
+}
+
+function _uni_untranslit($tree, $lv = 0) {
+	// карта обратимого транслита (взята из http://habrahabr.ru/post/265455/)
+	$translit_en_ru = array_flip(array('А' => 'A', 'Б' => 'B', 'В' => 'V', 'Г' => 'G', 'Д' => 'D', 'Е' => 'E', 'Ё' => 'JO', 'Ж' => 'ZH', 'З' => 'Z', 'И' => 'I', 'Й' => 'Y', 'К' => 'K', 'Л' => 'L', 'М' => 'M', 'Н' => 'N', 'О' => 'O', 'П' => 'P', 'Р' => 'R', 'С' => 'S', 'Т' => 'T', 'У' => 'U', 'Ф' => 'F', 'Х' => 'KH', 'Ц' => 'C', 'Ч' => 'CH', 'Ш' => 'SH', 'Щ' => 'SHH', 'Ъ' => 'JHH', 'Ы' => 'IH', 'Ь' => 'JH', 'Э' => 'EH', 'Ю' => 'JU', 'Я' => 'JA', 
+	'а' => 'a', 'б' => 'b', 'в' => 'v', 'г' => 'g', 'д' => 'd', 'е' => 'e', 'ё' => 'jo', 'ж' => 'zh', 'з' => 'z', 'и' => 'i', 'й' => 'y', 'к' => 'k', 'л' => 'l', 'м' => 'm', 'н' => 'n', 'о' => 'o', 'п' => 'p', 'р' => 'r', 'с' => 's', 'т' => 't', 'у' => 'u', 'ф' => 'f', 'х' => 'kh', 'ц' => 'c', 'ч' => 'ch', 'ш' => 'sh', 'щ' => 'shh', 'ъ' => 'jhh', 'ы' => 'ih', 'ь' => 'jh', 'э' => 'eh', 'ю' => 'ju', 'я' => 'ja', 
+	' ' => '_', '-' => '-', ',' => ',', '.' => '.', '(' => '(', ')' => ')', ';' => ';'));
+	
+	$str = $tree[$lv-1]['data'];
+	$str_len = mb_strlen($str, 'UTF-8');
+	$result = array('data' => '', 'data_type' => 'string');
+	for($i = 0; $i < $str_len; $i++) { 
+		$char = mb_substr($str, $i, 1, 'UTF-8');
+		switch($char) {
+			/*case '-':
+				if(mb_substr($str, $i, 2, 'UTF-8') == '--') {
+					$result['data'] .= '-';
+					$i++;
+				} else
+					$result['data'] .= ' ';
+				break; */
+			case 'j': case 'J':
+				switch(mb_substr($str, $i, 3, 'UTF-8')) {
+					case 'jhh':
+						$result['data'] .= 'ъ'; $i+=2; break;
+					case 'JHH':
+						$result['data'] .= 'Ъ'; $i+=2; break;
+					default:
+						switch(mb_substr($str, $i, 2, 'UTF-8')) {
+							case 'jh':
+								$result['data'] .= 'ь'; $i++; break;
+							case 'JH':
+								$result['data'] .= 'Ь'; $i++; break;
+							case 'ja':
+								$result['data'] .= 'я'; $i++; break;
+							case 'JA':
+								$result['data'] .= 'Я'; $i++; break;
+							case 'ju':
+								$result['data'] .= 'ю'; $i++; break;
+							case 'JU':
+								$result['data'] .= 'Ю'; $i++; break;
+							case 'jo':
+								$result['data'] .= 'ё'; $i++; break;
+							case 'JO':
+								$result['data'] .= 'Ё'; $i++; break;
+							default: 
+								$result['data'] .= $char; 
+						}
+				}
+				break;
+			case 's': case 'S':
+				switch(mb_substr($str, $i, 3, 'UTF-8')) {
+					case 'shh':
+						$result['data'] .= 'щ'; $i+=2; break;
+					case 'SHH':
+						$result['data'] .= 'Щ'; $i+=2; break;
+					default:
+						switch(mb_substr($str, $i, 2, 'UTF-8')) {
+							case 'sh':
+								$result['data'] .= 'ш'; $i++; break;
+							case 'SH':
+								$result['data'] .= 'Ш'; $i++; break;
+							default:
+								$result['data'] .= $char == 's' ? 'с' : 'С';
+						}
+				}
+				break;
+			case 'z': case 'Z':
+				switch(mb_substr($str, $i, 2, 'UTF-8')) {
+					case 'zh':
+						$result['data'] .= 'ж'; $i++; break;
+					case 'ZH':
+						$result['data'] .= 'Ж'; $i++; break;
+					default:
+						$result['data'] .= $char == 'z' ? 'з' : 'З';
+				}
+				break;
+			case 'k': case 'K':
+				switch(mb_substr($str, $i, 2, 'UTF-8')) {
+					case 'kh':
+						$result['data'] .= 'х'; $i++; break;
+					case 'KH':
+						$result['data'] .= 'Х'; $i++; break;
+					default:
+						$result['data'] .= $char == 'k' ? 'к' : 'К';
+				}
+				break;
+			case 'c': case 'C':
+				switch(mb_substr($str, $i, 2, 'UTF-8')) {
+					case 'ch':
+						$result['data'] .= 'ч'; $i++; break;
+					case 'CH':
+						$result['data'] .= 'Ч'; $i++; break;
+					default:
+						$result['data'] .= $char == 'c' ? 'ц' : 'Ц';
+				}
+				break;
+			case 'e': case 'e':
+				switch(mb_substr($str, $i, 2, 'UTF-8')) {
+					case 'eh':
+						$result['data'] .= 'э'; $i++; break;
+					case 'EH':
+						$result['data'] .= 'Э'; $i++; break;
+					default:
+						$result['data'] .= $char == 'e' ? 'е' : 'Е';
+				}
+				break;
+			case 'i': case 'I':
+				switch(mb_substr($str, $i, 2, 'UTF-8')) {
+					case 'ih':
+						$result['data'] .= 'ы'; $i++; break;
+					case 'IH':
+						$result['data'] .= 'Ы'; $i++; break;
+					default:
+						$result['data'] .= $char == 'i' ? 'и' : 'И';
+				}
+				break;
+			default:
+				if(isset($translit_en_ru[$char]))
+					$result['data'] .= $translit_en_ru[$char];
+				else
+					$result['data'] .= $char;
+		}
+	}
+
+	return $result;
 }
 
 function _uni_toURLTranslit($tree, $lv = 0) {
@@ -4869,10 +5558,10 @@ function _uni_formatQuantity($tree, $lv = 0) {
 		list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
 
 		$founded = $tree[$lv-1]['data'];
-		$suffix = isset($func_and_args[2]) ? $func_and_args[2] : 'штук';
+		$suffix = isset($args[2]) ? $args[2] : 'штук';
 		if($founded % 10 == 1 and $founded != 11)
 			$suffix = isset($args[0]) ? $args[0] : 'штука';
-		elseif(in_array($founded % 10, array(2,3,4)) && floor($founded / 10) != 1 or $founded == 0)
+		elseif(in_array($founded % 10, array(2,3,4)) && floor($founded / 10) != 1/* or $founded == 0*/)
 			$suffix = isset($args[1]) ? $args[1] : 'штуки';
 		
 		return array('data' => $founded." ".$suffix, 'data_type' => 'string');
@@ -4886,13 +5575,24 @@ function _uni_formatDate($tree, $lv = 0) {
 		list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
 
 		if(strpos($tree[$lv-1]['data'], '-') != false) {
-			$str = date('j-m-Y, H:i', strtotime($tree[$lv-1]['data']));
+			$str = date(isset($args[0]) ? $args[0] : 'j-m-Y, H:i', strtotime($tree[$lv-1]['data']));
 		} else
-			$str = date('j-m-Y, H:i');
+			$str = date(isset($args[0]) ? $args[0] : 'j-m-Y, H:i');
 			
-        $str = strtr($str, array('-01-' => ' января ', '-02-' => ' февраля ', '-03-' => ' марта ', '-04-' => ' апреля ',
-        '-05-' => ' мая ', '-06-' => ' июня ', '-07-' => ' июля ', '-08-' => ' августа ', '-09-' => ' сентября ',
-        '-10-' => ' октября ', '-11-' => ' ноября ', '-12-' => ' декабря '));
+        $str = strtr($str, array(
+		'-01-' => ' января ', ' Jan ' => ' янв ', ' January ' => ' января ',
+		'-02-' => ' февраля ', ' Feb ' => ' фев ', ' February ' => ' февраля ',
+		'-03-' => ' марта ', ' Mar ' => ' мар ', ' March ' => ' марта ',
+		'-04-' => ' апреля ', ' Apr ' => ' апр ', ' April ' => ' апреля ',
+		'-05-' => ' мая ', ' May ' => ' мая ',
+        '-06-' => ' июня ', ' Jun ' => ' июн ', ' June ' => ' июня ',
+        '-07-' => ' июля ', ' Jul ' => ' июля ', ' July ' => ' июля ',
+        '-08-' => ' августа ', ' Aug ' => ' авг ', ' August ' => ' августа ',
+        '-09-' => ' сентября ', ' Sep ' => ' сен ', ' September ' => ' сентября ',
+        '-10-' => ' октября ', ' Oct ' => ' окт ', ' October ' => ' октября ',
+        '-11-' => ' ноября ', ' Nov ' => ' ноя ', ' November ' => ' ноября ',
+        '-12-' => ' декабря ', ' Dec ' => ' дек ', ' November ' =>' декабря '
+        ));
 		
 		return array('data' => $str, 'data_type' => 'string');
 	}
@@ -4914,6 +5614,85 @@ function _uni_html_attr_safe($tree, $lv = 0) {
 	}
 	
 	return array('data' => null, 'data_type' => 'null');
+}
+
+function _uni_sprintf(&$tree, $lv = 0) {
+// 	assert('is_array($tree[$lv-1]["data"]) or isset($tree[$lv-1]["data_tracking"], $tree[$lv-1]["data_tracking"]["cursor()"]);');
+if(!empty($GLOBALS['unipath_debug'])) var_dump("sprintf start_data ---", $tree[$lv-1]);
+	// подготавливаем cursor() если это он
+	if(isset($tree[$lv-1]["data_tracking"], $tree[$lv-1]["data_tracking"]['cursor()'])) {
+		global $__uni_prt_cnt;
+		$data = new SplFixedArray($__uni_prt_cnt);
+		$cursor_ok = call_user_func_array(
+			$tree[$lv-1]["data_tracking"]['cursor()'],
+			array(&$tree, $lv-1, 'rewind'));
+
+if(!empty($GLOBALS['unipath_debug'])) var_dump('UniPath.'.__FUNCTION__.': $cursor_ok = '.var_export($cursor_ok, true));
+		if($cursor_ok != true) {
+			trigger_error('UniPath.'.__FUNCTION__.': '.$tree[$lv-1]["data_tracking"]['cursor()'].'(rewind) return '.var_export($cursor_ok, true), E_USER_NOTICE);
+			return array('data' => null, 'data_type' => 'null');
+		}
+	}
+	
+	// любой другой тип данных приводим к массиву
+	else
+		$data = (array) $tree[$lv-1]["data"];
+
+	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
+
+	$result = array('data' => array(), 'data_type' => 'array');
+	foreach($data as $key => $item) {
+
+		// если это курсор, то берём следующий элемент
+		if(isset($cursor_ok) and $cursor_ok = call_user_func_array($tree[$lv-1]["data_tracking"]['cursor()'], array(&$tree, $lv-1, 'next'))) {
+				$item = $cursor_ok['data'];
+				$key = isset($cursor_ok['data_tracking'], $cursor_ok['data_tracking']['key()'])
+					? $cursor_ok['data_tracking']['key()']
+					: $key;
+		}
+		elseif(isset($cursor_ok))
+			break;
+			
+	
+		$sprintf_args = $args;
+		foreach($args_types as $arg_name => $arg_type)
+			if($arg_type == 'unipath') {
+				$uni_result = __uni_with_start_data(
+					$item, gettype($item), array('key()' => $key),
+					$args[$arg_name]);
+				$sprintf_args[$arg_name] = $uni_result['data'];
+			}
+
+		$result['data'][$key] = call_user_func_array('sprintf', $sprintf_args);
+// var_dump($result['data'][$key], $sprintf_args);
+	}
+// var_dump($result);
+	// скалярные данные преобразуем обратно
+	if(!is_array($tree[$lv-1]["data"]) and !isset($tree[$lv-1]["data_tracking"], $tree[$lv-1]["data_tracking"]['cursor()']))
+		return array(
+			'data' => current($result['data']),
+			'data_type' => 'string');
+	
+	return $result;
+}
+
+function _uni_sprintf1(&$tree, $lv = 0) {
+
+	if(!isset($tree[$lv-1]['data'])) 
+		return array('data' => null, 'data_type' => 'null');
+
+	// упакуем в массив
+	$tree[$lv-1]['data'] = array($tree[$lv-1]['data']);
+
+	// вызовем
+	$uni_result = _uni_sprintf($tree, $lv);
+	$uni_result['data'] = $uni_result['data'][0];
+	$uni_result['data_type'] = 'string';
+
+	// распакуем обратно
+	$tree[$lv-1]['data'] = $tree[$lv-1]['data'];
+	
+	return $uni_result;
 }
 
 function _uni_asImageFile($tree, $lv = 0) {
@@ -5266,25 +6045,25 @@ function _uni_asXml($tree, $lv = 0) {
 		'data_tracking' => array('cursor()' => '_cursor_asXml'));
 }
 
-function _cursor_asXml($tree, $lv = 0, $cursor_cmd = '', $cursor_arg1 = null) {
+function _cursor_asXml(&$tree, $lv = 0, $cursor_cmd = '', $cursor_arg1 = null) {
 // if($cursor_cmd != 'next')
 // var_dump($tree[$lv]['name']." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($cursor_arg1)&&isset($cursor_arg1['name'])?$cursor_arg1['name']:''));
 	
 	// REWIND
 	if($cursor_cmd == 'rewind' and $tree[$lv]['data_type'] == "array/xml-fragments") {
-		$cursor_vars = array('current_pos' => 0);
-		return array(true, 'cursor_vars' => $cursor_vars);
+		$tree[$lv]['data_tracking']['current_pos'] = 0;
+		return true;
 	}
 	
 	// NEXT
 	if($cursor_cmd == 'next' and $tree[$lv]['data_type'] == "array/xml-fragments") {
-		$cursor_vars = isset($tree[$lv]['data_tracking']['cursor_vars']) ? $tree[$lv]['data_tracking']['cursor_vars'] : array();
-		$pos = isset($cursor_vars['current_pos']) ? $cursor_vars['current_pos'] : 0;
+		$data_tracking = & $tree[$lv]['data_tracking'];
+		$pos = isset($data_tracking['current_pos']) ? $data_tracking['current_pos'] : 0;
 		
 		if(isset($tree[$lv]['data'][$pos])) {
+			$data_tracking['current_pos'] = $pos + 1;
 			$result = array(
-				'data' => $tree[$lv]['data'][$pos],
-				'cursor_vars' => array('current_pos' => $pos+1) + $cursor_vars
+				'data' => $tree[$lv]['data'][$pos]
 			);
 			
 			if(isset($tree[$lv]['data_tracking']['each_data_tracking'], $tree[$lv]['data_tracking']['each_data_tracking'][$pos])) {
@@ -5295,7 +6074,7 @@ function _cursor_asXml($tree, $lv = 0, $cursor_cmd = '', $cursor_arg1 = null) {
 			return $result;
 		}
 		
-		return array('cursor_vars' => $cursor_vars);
+		return array();
 	}
 	
 	// EVAL
