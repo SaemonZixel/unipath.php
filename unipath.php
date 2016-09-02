@@ -3,8 +3,9 @@
 /**
  *  UniPath - XPath like access to DataBase, Files, XML, Arrays and any other data from PHP
  *  
- *  @version: 2.2-dev
- *  @author: Saemon Zixel (saemon-zixel.ru) on 2013-2016 year
+ *  @version  2.2.1-beta
+ *  @author   Saemon Zixel <saemonzixel@gmail.com>
+ *  @link     https://github.com/SaemonZixel/unipath
  *
  *	UniversalPath (UniPath.php) - универсальный доступ к любым ресурсам
  *  Задумывался как простой, компактный и удобный интерфейс ко всему. Идеологически похож на jQuery и XPath.
@@ -13,7 +14,8 @@
  *  параметры запущенного приложения или считать запись access.log по определённой дате и подстроке UserAgent и т.д.
  *  Но всё это в светлом будущем:) Сейчас реализованна только маленькая часть.
  *
- *  @license: MIT
+ *
+ *  @license  MIT
  *
  *  Copyright (c) 2013-2016 Saemon Zixel
  *
@@ -235,7 +237,8 @@ function __uni_with_start_data($data, $data_type, $data_tracking, $unipath) {
 			// если это cursor()
 			if(isset($data_tracking['cursor()'])) {
 				if(function_exists($data_tracking['cursor()']))
-					call_user_func($data_tracking['cursor()'], array($tree[$i]), 0, 'set', $tree[$prev_i]['data'], $tree[$prev_i]['data_type'], $tree[$prev_i]['data_tracking']);
+					call_user_func($data_tracking['cursor()'], array($tree[$i]), 0, 'set', $tree[$prev_i]['data'], $tree[$prev_i]['data_type'], 
+					isset($tree[$prev_i]['data_tracking']) ? $tree[$prev_i]['data_tracking'] : null);
 				else
 					trigger_error('UniPath: '.$data_tracking['cursor()'].' - not exist! *** ', E_USER_ERROR);
 					
@@ -731,11 +734,12 @@ if(!empty($GLOBALS['unipath_debug'])) {
 							case 'number':
 								$filter[$expr]['right_sql'] = $filter[$expr]['right'];
 								break;
-							case 'list_of_numbers':
+							case 'list-of-number':
 								$filter[$expr]['right_sql'] = "(".implode(',',$filter[$expr]['right']).")";
 								$filter[$expr]['op'] = 'IN';
 								break;
-							case 'list_of_strings':
+							case 'list-of-string':
+							case 'list-of-string-with-N':
 								switch($prev_data_type) {
 									case 'object/PDO':
 										$filter[$expr]['right_sql'] = "(".implode(', ',
@@ -1495,7 +1499,7 @@ if(!empty($GLOBALS['unipath_debug'])) $filter[$expr]['left_result'] = $left_resu
 								$right_result = null;
 							else
 								$right_result = isset($row[$filter[$expr]['right']]) ? $row[$filter[$expr]['right']] : null;
-						case 'list_of_strings':
+						case 'list-of-string':
 							$right_result = $filter[$expr]['right'];
 							$filter[$expr]['op'] = 'in_right';
 							break;
@@ -1816,7 +1820,7 @@ if(!empty($GLOBALS['unipath_debug'])) $filter[$expr]['left_result'] = $left_resu
 							$right_result = null;
 						else
 							$right_result = isset($row[$filter[$expr]['right']]) ? $row[$filter[$expr]['right']] : null;
-					case 'list_of_strings':
+					case 'list-of-string':
 						$right_result = $filter[$expr]['right'];
 						$filter[$expr]['op'] = 'in_right';
 						break;
@@ -2061,17 +2065,48 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("fieldname detected: $p,$le
 					
 					$tmp_stack = new SplFixedArray(32); $tmp_num = 0; $tmp_stack[0] = 12;
 					while($p < strlen($xpath)) {
-						if($xpath[$p] == '(' and  $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 12;
+					
+						// ```````...
+						if($xpath[$p] == "`" and $tmp_stack[$tmp_num] > 10 and isset($xpath[$p+6]) and $xpath[$p+1] == '`' and $xpath[$p+2] == '`' and $xpath[$p+3] == '`' and $xpath[$p+4] == '`' and $xpath[$p+5] == '`' and $xpath[$p+6] == '`') { 
+							$p += 6;
+							$tmp_stack[++$tmp_num] = 5;
+						}
+						
+						// ...```````
+						elseif($tmp_stack[$tmp_num] == 5 and isset($xpath[$p+6]) and $xpath[$p] == '`' and $xpath[$p+1] == '`' and $xpath[$p+2] == '`' and $xpath[$p+3] == '`' and $xpath[$p+4] == '`' and $xpath[$p+5] == '`' and $xpath[$p+6] == '`') {
+							if(isset($xpath[$p+7]) and $xpath[$p+7] == '`') { $p++; continue; }
+							$p += 6;
+							$tmp_num--;
+						}
+					
+						// ...```
+						elseif($tmp_stack[$tmp_num] == 4 and isset($xpath[$p+2]) 
+							and $xpath[$p] == '`' and $xpath[$p+1] == '`' and $xpath[$p+2] == '`') {
+							if(isset($xpath[$p+3]) and $xpath[$p+3] == '`') { $p++; continue; }
+							$p += 2;
+							$tmp_num--;
+						}
+						
+						// ```...
+						elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] > 10 and isset($xpath[$p+2]) and $xpath[$p+1] == '`' and $xpath[$p+2] == '`') { 
+							$p += 2;
+							$tmp_stack[++$tmp_num] = 4;
+						}
+						
+						// `...`
+						elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] == 3) $tmp_num--;
+						elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 3;
+						
+						elseif($xpath[$p] == '(' and  $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 12;
 						elseif($xpath[$p] == ')' and $tmp_num == 1) { $p++; break; }
 						elseif($xpath[$p] == ')' and $tmp_stack[$tmp_num] == 12) $tmp_num--;
 						elseif($xpath[$p] == "'" and $tmp_stack[$tmp_num] == 1) $tmp_num--;
 						elseif($xpath[$p] == "'" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 1;
 						elseif($xpath[$p] == "\"" and $tmp_stack[$tmp_num] == 2) $tmp_num--;
 						elseif($xpath[$p] == "\"" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 2;
-						elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] == 3) $tmp_num--;
-						elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 3;
 						
-if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("function_parse - {$xpath[$p]}, tmp_num = ".$tmp_num.", tmp_stack[{$tmp_num}] = ".$tmp_stack[$tmp_num]);
+						
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("function_parse - {$xpath[$p]}".str_repeat(' ',$tmp_num*3)." tmp_stack[{$tmp_num}] = ".$tmp_stack[$tmp_num]);
 						$p++;
 					}
 					
@@ -2422,7 +2457,7 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_closed - $p"
 
 						// возможно это список чисел
 						if($xpath[$p] == ',') {
-							$filter[$expr][$expr_key.'_type'] = 'list_of_numbers';
+							$filter[$expr][$expr_key.'_type'] = 'list-of-number';
 							$filter[$expr][$expr_key] = array($filter[$expr][$expr_key]);
 							$p++;
 							
@@ -2435,8 +2470,7 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_closed - $p"
 					}
 					
 					// строка
-					if($xpath[$p] == "'" or $xpath[$p] == '"' or $xpath[$p] == '`'
-						or ($xpath[$p] == 'N' and isset($xpath[$p+1]) and $xpath[$p+1] == "'")) {
+					if(strpos('\'`"', $xpath[$p]) !== false or ($xpath[$p] == 'N' and isset($xpath[$p+1]) and strpos('\'`"', $xpath[$p+1]) !== false)) {
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_string_start - $p");
 						// подкоректируем начало MSSQL UnicodeString
 						if($xpath[$p] == 'N') { 
@@ -2447,28 +2481,88 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_string_start - $p")
 							
 							
 						$start_p = $p++;
-						$p = strcspn($xpath, $xpath[$start_p], $p);
-						$val = substr($xpath, $start_p+1, $p);
-						$p = $start_p + $p + 2;
+
+						// ```````...```````
+						if(isset($xpath[$p+5]) and strspn($xpath, "`", $p, 5) == 5) {
+							$p = strpos($xpath, '```````', $p+6);
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_string_type = ```````, end = ".$p);
+							if($p == false)
+								trigger_error("UniPath.__uni_parseUniPath(): Not found end ``````` in filter! (".substr($xpath, $start_p+7).")", E_USER_ERROR);
+							while(isset($xpath[$p+7]) and $xpath[$p+7] == '`') $p++;
+							$val = substr($xpath, $start_p+7, $p-$start_p-7);
+							$p += 7;
+						}
+						
+						// ```...```
+						elseif(isset($xpath[$p+2]) and strspn($xpath, "`", $p, 2) == 2) {
+							$p = strpos($xpath, '```', $p+2);
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_string_type = ```, end = ".$p);
+							if($p == false)
+								trigger_error("UniPath.__uni_parseUniPath(): Not found end ``` in filter! (".substr($xpath, $start_p).")", E_USER_ERROR);
+							while(isset($xpath[$p+3]) and $xpath[$p+3] == '`') $p++;
+							$val = substr($xpath, $start_p+3, $p-$start_p-3);
+							$p += 3;
+						}
+						
+						// `...`, '...', "..."
+						else {
+							$p = strcspn($xpath, $xpath[$start_p], $p);
+							$val = substr($xpath, $start_p+1, $p);
+							$p = $start_p + $p + 2;
+						}
 
 						$filter[$expr][$expr_key] = $val;
-						
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_string_end - $val");
+
 						// возможно это список строк
 						$space = strspn($xpath, " \t\n", $p);
 						if($xpath[$p+$space] == ',') {
-							$filter[$expr][$expr_key.'_type'] = 'list_of_strings';
+							$filter[$expr][$expr_key.'_type'] = 'list-of-'.$filter[$expr][$expr_key.'_type'];
 							$filter[$expr][$expr_key] = array($filter[$expr][$expr_key]);
 							$p += $space+1;
 
 							$space = strspn($xpath, " \t\n", $p);
-							while(isset($xpath[$p+$space]) 
-								and strpos("\"'`", $xpath[$p+$space]) !== false) {
-								// начало, конец, строку в список, передвинем указатель
-								$start_p = $p + $space;
-								$p = strcspn($xpath, $xpath[$start_p], $start_p+1);
-								$filter[$expr][$expr_key][] = substr($xpath, $start_p+1, $p);
-								$p = $start_p + $p + 2;
+							while(isset($xpath[$p+$space]) and strpos("\"'`N", $xpath[$p+$space]) !== false) {
+								$p += $space;
 								
+								// MSSQL UnicodeString
+								if($xpath[$p] == 'N') $p++;
+								
+								$start_p = $p++;
+
+								// ```````...```````
+								if(isset($xpath[$p+5]) and strspn($xpath, "`", $p, 5) == 5) {
+									$p = strpos($xpath, '```````', $p+6);
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_list_string_type = ```````, end = ".$p);
+									if($p == false)
+										trigger_error("UniPath.__uni_parseUniPath(): Not found end ``````` in filter! (".substr($xpath, $start_p+7).")", E_USER_ERROR);
+									while(isset($xpath[$p+7]) and $xpath[$p+7] == '`') $p++;
+									$val = substr($xpath, $start_p+7, $p-$start_p-7);
+									$p += 7;
+								}
+								
+								// ```...```
+								elseif(isset($xpath[$p+2]) and strspn($xpath, "`", $p, 2) == 2) {
+									$p = strpos($xpath, '```', $p+2);
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_list_string_type = ```, end = ".$p);
+									if($p == false)
+										trigger_error("UniPath.__uni_parseUniPath(): Not found end ``` in filter! (".substr($xpath, $start_p).")", E_USER_ERROR);
+									while(isset($xpath[$p+3]) and $xpath[$p+3] == '`') $p++;
+									$val = substr($xpath, $start_p+3, $p-$start_p-3);
+									$p += 3;
+								}
+								
+								// `...`, '...', "..."
+								else {
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_list_string_type = {$xpath[$start_p]}, end = ".$p);
+									$p = strcspn($xpath, $xpath[$start_p], $p);
+									$val = substr($xpath, $start_p+1, $p);
+									$p = $start_p + $p + 2;
+								}	
+	
+								$filter[$expr][$expr_key][] = $val;
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_list_string = ".implode(',', $filter[$expr][$expr_key]));
+
 								$space = strspn($xpath, " \t\n", $p);
 								if($xpath[$p+$space] != ',') break;
 								$space += strspn($xpath, " \t\n", $p+$space+1) + 1;
@@ -2495,11 +2589,43 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_string_start - $p")
 						$start_p = $p;
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_detected - $p");
 
-						// [-91, \-92, ]-93, (-40, )-41, '-39, "-34, `-96
+						
 						$func_flag = false; $unipath_flag = $xpath[$p] == '/';
-						$tmp_stack = new SplFixedArray(32); $tmp_num = 0;
+						$tmp_stack = new SplFixedArray(32); $tmp_num = 0; $tmp_stack[0] = 99;
 						while($p < strlen($xpath)) {
-							if($xpath[$p] == '[') { $tmp_stack[++$tmp_num] = $unipath_flag = 11; }
+						
+							// ```````...
+							if($xpath[$p] == "`" and $tmp_stack[$tmp_num] > 10 and isset($xpath[$p+6]) and $xpath[$p+1] == '`' and $xpath[$p+2] == '`' and $xpath[$p+3] == '`' and $xpath[$p+4] == '`' and $xpath[$p+5] == '`' and $xpath[$p+6] == '`') { 
+								$p += 6;
+								$tmp_stack[++$tmp_num] = 5;
+							}
+							
+							// ...```````
+							elseif($tmp_stack[$tmp_num] == 5 and isset($xpath[$p+6]) and $xpath[$p] == '`' and $xpath[$p+1] == '`' and $xpath[$p+2] == '`' and $xpath[$p+3] == '`' and $xpath[$p+4] == '`' and $xpath[$p+5] == '`' and $xpath[$p+6] == '`') {
+								if(isset($xpath[$p+7]) and $xpath[$p+7] == '`') { $p++; continue; }
+								$p += 6;
+								$tmp_num--;
+							}
+						
+							// ...```
+							elseif($tmp_stack[$tmp_num] == 4 and isset($xpath[$p+2]) 
+								and $xpath[$p] == '`' and $xpath[$p+1] == '`' and $xpath[$p+2] == '`') {
+								if(isset($xpath[$p+3]) and $xpath[$p+3] == '`') { $p++; continue; }
+								$p += 2;
+								$tmp_num--;
+							}
+							
+							// ```...
+							elseif($tmp_stack[$tmp_num] > 10 and $xpath[$p] == "`" and isset($xpath[$p+2]) and $xpath[$p+1] == '`' and $xpath[$p+2] == '`') { 
+								$p += 2;
+								$tmp_stack[++$tmp_num] = 4;
+							}
+							
+							// `...`
+							elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] == 3) $tmp_num--;
+							elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 3;
+						
+							elseif($xpath[$p] == '[' and $tmp_stack[$tmp_num] > 10) { $tmp_stack[++$tmp_num] = $unipath_flag = 11; }
 							elseif($xpath[$p] == ']' and $tmp_stack[$tmp_num] == 11) $tmp_num--;
 							elseif($xpath[$p] == '(') { $tmp_stack[++$tmp_num] = $func_flag = 12; }
 							elseif($xpath[$p] == ')' and $tmp_num == 0) break;
@@ -2508,16 +2634,14 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_detec
 							elseif($xpath[$p] == "'" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 1;
 							elseif($xpath[$p] == "\"" and $tmp_stack[$tmp_num] == 2) $tmp_num--;
 							elseif($xpath[$p] == "\"" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 2;
-							elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] == 3) $tmp_num--;
-							elseif($xpath[$p] == "`" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 3;
-							elseif($xpath[$p] == "/") $unipath_flag = true;
+							elseif($xpath[$p] == "/" and $tmp_stack[$tmp_num] == 99) $unipath_flag = 99;
 							elseif(strpos(" \n\t]=<>*-+!", $xpath[$p]) !== false and $tmp_num == 0) break;
-if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_skip - {$xpath[$p]}, tmp_num = ".$tmp_num.", tmp_stack[{$tmp_num}] = ".$tmp_stack[$tmp_num]);
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_skip - {$xpath[$p]} ".str_repeat(" ",$tmp_num*3)." tmp_stack[{$tmp_num}] = {$tmp_stack[$tmp_num]}");
 							$p++;
 						}
 						
 						$val = substr($xpath, $start_p, $p - $start_p);
-if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_result = $val, func_flag = $func_flag, unipath_flag = $func_flag");
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_result = $val, func_flag = $func_flag, unipath_flag = $unipath_flag");
 
 						/*if(isset($filter[$expr][$expr_key]))
 							$filter[$expr][$expr_key] .= $val;
@@ -2551,21 +2675,35 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_resul
 			if($xpath[$p] == '`' or $xpath[$p] == '"' or $xpath[$p] == "'") {
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('string start - '.$p);
 				//$start_string_p = $p++;
+				
+// var_dump($xpath[$p], substr($xpath, $p, 7));				
 				switch($xpath[$p]) {
 					case '`':
-						if(substr_compare($xpath, '```', $p, 3, false) == 0)
-							$string_border = '```';
-						else
-							$string_border = '`';
+						if(isset($xpath[$p+6]) and substr_compare($xpath, '```````', $p, 7) == 0) {
+							$p += 7;
+							$end = strpos($xpath, $string_border = '```````', $p);
+						} 
+						elseif(isset($xpath[$p+2]) and substr_compare($xpath, '```', $p, 3) == 0) {
+							$p += 3;
+							$end = strpos($xpath, $string_border = '```', $p);
+						} 
+						else {
+							$p += 1;
+							$end = strpos($xpath, $string_border = '`', $p);
+						}
+						while($end and isset($xpath[$end+strlen($string_border)]) and $xpath[$end+strlen($string_border)] == '`')
+							$end++;
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('$string_border = '.$string_border.' , value = '.substr($xpath, $p, $end-$p));
 						break;
 					case "'":
 					case '"':
 						$string_border = $xpath[$p];
-				}
-				$p += strlen($string_border);
+						$p += strlen($string_border);
+						
+						// поищем окончание строки
+						$end = strpos($xpath, $string_border, $p);
+				} 
 				
-				// поищем окончание строки
-				$end = strpos($xpath, $string_border, $p);
 				if($end === false) 
 					trigger_error("UniPath.__uni_parseUniPath(): Not found end of string started on $p! (".substr($xpath, $p-strlen($string_border)).')', E_USER_ERROR);
 
@@ -2573,6 +2711,7 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('string start - '.$p);
 				
 				// передвинем указатель
 				$p = $end + strlen($string_border);
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump(substr($xpath, $p));
 				continue;
 			}
 			
@@ -2964,7 +3103,8 @@ if(!empty($GLOBALS['unipath_debug'])) $filter[$expr]['left_result'] = $left_resu
 					else
 						$right_result = isset($row[$filter[$expr]['right']]) ? $row[$filter[$expr]['right']] : null;
 					break;
-				case 'list_of_strings':
+				case 'list-of-string':
+				case 'list-of-string-with-N':
 					$right_result = $filter[$expr]['right'];
 					$filter[$expr]['op'] = 'in_right';
 					break;
@@ -3524,7 +3664,7 @@ function __cursor_database_set($tree, $lv, $set_value, $cursor_arg1_data_type = 
 					$sql_upd_set[$table_and_col[0]][$table_and_col[1]] = "NULL";
 					
 				// если числовой
-				elseif(is_numeric($set_value) and $set_value[0] !== '0') 
+				elseif(is_numeric($set_value) and $set_value[0] !== '0' and $set_value[0] != '+') 
 					$sql_upd_set[$table_and_col[0]][$table_and_col[1]] = "$set_value";
 
 				// это мы необрабатываем!

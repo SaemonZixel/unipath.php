@@ -1,3 +1,8 @@
+2016-09-02  Saemon Zixel  <saemonzixel@gmail.com>
+
+	* version 2.2.1-beta
+	* repaired parsing `, ``` and ``````` in unipath
+
 2016-07-12  Saemon Zixel  <saemonzixel@gmail.com>
 	
 	* version 2.2-dev
