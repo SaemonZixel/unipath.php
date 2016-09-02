@@ -134,7 +134,7 @@ if(isset($_GET['test_parseUniPath'])) {
 			'left_type' => 'name', 
 			'op' => '=', 
 			'right' => array(11,14), 
-			'right_type' => 'list_of_numbers',
+			'right_type' => 'list-of-number',
 			'next' => 'expr3'), 
 		'expr2' => array(
 			'left' => 'expr1', 
@@ -432,10 +432,7 @@ if(isset($_GET['test_parseUniPath'])) {
 	$unipath = 'db1/orders[u_id = /_SESSION/user/u_id and ord_deleted = 0]';
 	echo "<h3>--- $unipath ---</h3>";
 	$tree = __uni_parseUniPath($unipath);
-	_cursor_assertEqu(
-		array(array('name' => 'parse_inner_regexp_replace', 'data' => $tree[2])), 
-		0, 'set',
-		array('name' => 'orders',
+	assert("\$tree[2] = array('name' => 'orders',
 			'filter' => array('start_expr' => 'expr1',
 				'expr1' => array(
 					'left' => 'u_id',
@@ -462,17 +459,14 @@ if(isset($_GET['test_parseUniPath'])) {
 					'next' => 'expr2'
 				)
 			), 
-			'unipath' => "db1/orders[u_id = /_SESSION/user/u_id and ord_deleted = 0]"
-		));
+			'unipath' => \"db1/orders[u_id = /_SESSION/user/u_id and ord_deleted = 0]\"
+		); /* ".print_r($tree[2], true)." */");
 		
 	$unipath = "/db1/table1[id = -123]";
 	echo "<h3>--- $unipath ---</h3>";
 //$GLOBALS['unipath_debug'] = true;
 	$tree = __uni_parseUniPath($unipath);
-	_cursor_assertEqu(
-		array(array('name' => 'parse_negative_number', 'data' => $tree[2])), 
-		0, 'set',
-		array('name' => 'table1',
+	assert("\$tree[2] == array('name' => 'table1',
 			'filter' => array('start_expr' => 'expr1',
 				'expr1' => array(
 					'left' => 'id',
@@ -480,39 +474,33 @@ if(isset($_GET['test_parseUniPath'])) {
 					'op' => '=',
 					'right' => -123,
 					'right_type' => 'number',
-				))));
+				)),
+			'unipath' => '/db1/table1[id = -123]'); /* ".print_r($tree[2], true)." */");
 	
 	$unipath = "/db1/table1[]";
 	echo "<h3>--- $unipath ---</h3>";
 //$GLOBALS['unipath_debug'] = true;
 	$tree = __uni_parseUniPath($unipath);
-	_cursor_assertEqu(
-		array(array('name' => 'parse_empty_filter', 'data' => $tree[2])), 
-		0, 'set',
-		array('name' => 'table1',
-			'filter' => array('start_expr' => 'expr1', 'expr1' => array())));
+	assert("\$tree[2] == array('name' => 'table1',
+			'filter' => array('start_expr' => 'expr1', 'expr1' => array()), 'unipath' => '/db1/table1[]'); /* ".print_r($tree[2], true)." */");
 
 	$unipath = "/db1/table1[1]";
 	echo "<h3>--- $unipath ---</h3>";
 //$GLOBALS['unipath_debug'] = true;
 	$tree = __uni_parseUniPath($unipath);
 // print_r($tree);
-	_cursor_assertEqu(
-		array(array('name' => 'parse_empty_filter', 'data' => $tree[2])), 
-		0, 'set',
-		array('name' => 'table1',
+	assert("\$tree[2] == array(
+			'name' => 'table1',
 			'filter' => array('start_expr' => 'expr1', 
 				'expr1' => array('left' => '1', 'left_type' => 'number')
-			)));
+			), 
+			'unipath' => '/db1/table1[1]'); /* ".print_r($tree[2], true)." */");
 			
 	$unipath = "/.[1=1 and (DataXML/zemucharea = 'Лазаревский' or DataXML/zemucharea = 'Хостинский') and DataXML/priceuch <= 0]";
 	echo "<h3>--- $unipath ---</h3>";
 	$tree = __uni_parseUniPath($unipath);
-//print_r($tree); 
-	_cursor_assertEqu(
-		array(array('name' => 'parse_brackets_or', 'data' => $tree[1])), 
-		0, 'set',
-		array('name' => '.',
+// print_r($tree); 
+	assert("\$tree[1] == array('name' => '.',
 			'filter' => array('start_expr' => 'expr1',
 				'expr1' => array(
 					'left' => 1,
@@ -572,9 +560,8 @@ if(isset($_GET['test_parseUniPath'])) {
 					'right_type' => 'number',
 					'next' => 'expr6'
 				)
-			)
-		)
-	);
+			),
+		'unipath' => \"/.[1=1 and (DataXML/zemucharea = 'Лазаревский' or DataXML/zemucharea = 'Хостинский') and DataXML/priceuch <= 0]\"); /* ".print_r($tree[1], true)." */");
 	
 	$unipath = "/.[DataXML/ulstreet='Депутатская','Учительская', \"Лермонтова\", `Пирогова`, 'Грибоедова', 'Дмитриевой', 'Комсомольская', 'Лысая']";
 	echo "<h3>--- $unipath ---</h3>";
@@ -587,7 +574,7 @@ if(isset($_GET['test_parseUniPath'])) {
 				'left_type' => 'unipath',
 				'op' => '=',
 				'right' => array('Депутатская', 'Учительская', 'Лермонтова', 'Пирогова', 'Грибоедова', 'Дмитриевой', 'Комсомольская', 'Лысая'),
-				'right_type' => 'list_of_strings')
+				'right_type' => 'list-of-string')
 			), 
 			'unipath' => '/.[DataXML/ulstreet=\\'Депутатская\\',\\'Учительская\\', \"Лермонтова\", `Пирогова`, \\'Грибоедова\', \\'Дмитриевой\', \\'Комсомольская\\', \\'Лысая\\']'); /* ".print_r($tree[1], true).' */');
 // print_r($tree);
@@ -685,6 +672,40 @@ echo "<h3>--- $unipath ---</h3>";
 	echo '</xmp>';
 // $GLOBALS['unipath_debug_parse'] = false;
 	
+	$unipath = "/wp/db/posts[post_parent = /post/ID and like(post_mime_type, `audio/%`)]";
+	echo "<h3><xmp>--- $unipath ---</xmp></h3><xmp>";
+// $GLOBALS['unipath_debug_parse'] = true;
+	$result = __uni_parseUniPath($unipath);
+// var_export($result[3]);
+	assert("\$result[3] == array (
+  'name' => 'posts',
+  'filter' => 
+  array (
+    'start_expr' => 'expr1',
+    'expr1' => 
+    array (
+      'left' => 'post_parent',
+      'left_type' => 'name',
+      'op' => '=',
+      'right' => '/post/ID',
+      'right_type' => 'unipath',
+      'next' => 'expr2',
+    ),
+    'expr2' => 
+    array (
+      'left' => 'expr1',
+      'left_type' => 'expr',
+      'op' => 'and',
+      'next' => NULL,
+      'right' => 'like(post_mime_type, `audio/%`)',
+      'right_type' => 'function',
+    ),
+  ),
+  'unipath' => '/wp/db/posts[post_parent = /post/ID and like(post_mime_type, `audio/%`)]',
+); /* ".print_r($result[3], true)." */");
+	echo '</xmp>';
+// $GLOBALS['unipath_debug_parse'] = false;
+	
 	$unipath = '/soxp_db()/prm_news[pn_author=/item/fio and pn_ispub=1 and pn_datepublic < /php:date(`Y-m:d H:i:s`)]/order_by(`pn_datepublic DESC`)/limit(1)';
 	echo "<h3><xmp>--- $unipath ---</xmp></h3><xmp>";
 // $GLOBALS['unipath_debug_parse'] = true;
@@ -739,10 +760,96 @@ echo "<h3>--- $unipath ---</h3>";
 	echo '</xmp>';
 // $GLOBALS['unipath_debug_parse'] = false;
 	
+	$unipath = "/_SERVER/```````HTTP_HOST````````/```\"1\"`2'3````/`0`";
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug_parse'] = true;
+	$result = __uni_parseUniPath($unipath);
+// var_dump($result[1]);
+	assert("\$result[2]['name'] == 'HTTP_HOST`'; /* ".print_r($result[2]['name'], true)." */");
+	assert("\$result[3]['name'] == '\"1\"`2\'3`'; /* ".print_r($result[3]['name'], true)." */");
+	assert("\$result[4]['name'] == '0'; /* ".print_r($result[4]['name'], true)." */");
+// $GLOBALS['unipath_debug_parse'] = false;
+	
+	$unipath = "/sprintf1(`````````it`s only test %s!```````, /if(['`1'=```1```` and /array(``, ```1]][2))`3```, '\"]')]/```test````,`1`,```2```)/0)/0";
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug_parse'] = true;
+	$result = __uni_parseUniPath($unipath);
+// var_dump($result[1]);
+	assert("\$result[1]['name'] == 'sprintf1(`````````it`s only test %s!```````, /if([\'`1\'=```1```` and /array(``, ```1]][2))`3```, \'\"]\')]/```test````,`1`,```2```)/0)'; /* ".print_r($result[1]['name'], true)." */");
+// $GLOBALS['unipath_debug_parse'] = false;
+
+	$unipath = "/[```````1`````````=```1```` and /array(``, ```1]][2))`3```, '\"]') = NULL]";
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug_parse'] = true;
+	$result = __uni_parseUniPath($unipath);
+// var_export($result[1]);
+	assert("\$result[1]['filter'] == array(
+			'start_expr' => 'expr1',
+			'expr1' => array (
+				'left_type' => 'string',
+				'left' => '1``',
+				'op' => '=',
+				'right_type' => 'string',
+				'right' => '1`',
+				'next' => 'expr3',
+				),
+			'expr2' => array (
+				'left' => 'expr1',
+				'left_type' => 'expr',
+				'op' => 'and',
+				'next' => NULL,
+				'right' => 'expr3',
+				'right_type' => 'expr',
+				),
+			'expr3' => array (
+				'left' => '/array(``, ```1]][2))`3```, \'\"]\')',
+				'left_type' => 'unipath',
+				'op' => '=',
+				'next' => 'expr2',
+				'right' => 'NULL',
+				'right_type' => 'name',
+				)
+		); /* ".print_r($result[1]['filter'], true)." */");
+// $GLOBALS['unipath_debug_parse'] = false;
+	
+	$unipath = "/[a=`111`, ```222````, ```````333````````, N'444', N'555' or 1]";
+	echo "<h3>--- $unipath ---</h3>";
+// $GLOBALS['unipath_debug_parse'] = true;
+	$result = __uni_parseUniPath($unipath);
+// var_export($result[1]);
+	assert("\$result[1]['filter'] == array(
+			'start_expr' => 'expr1',
+			'expr1' => array (
+				'left_type' => 'name',
+				'left' => 'a',
+				'op' => '=',
+				'right_type' => 'list-of-string',
+				'right' => array('111', '222`', '333`', '444', '555'),
+				'next' => 'expr2',
+				),
+			'expr2' => array (
+				'left' => 'expr1',
+				'left_type' => 'expr',
+				'op' => 'or',
+				'next' => NULL,
+				'right' => '1',
+				'right_type' => 'number',
+				),
+		); /* ".print_r($result[1]['filter'], true)." */");
+// $GLOBALS['unipath_debug_parse'] = false;
+	
+	$func_string = "sprintf1(`````````it`s only test %s!```````, /if(['`1'=```1```` and /array(``, ```1]][2))`3```, '\"]')]/```test````,`1`,```2```)/0)";
+	echo "<h3>--- $func_string ---</h3>";
+	$result = __uni_parseFuncArgs($func_string);
+	assert("\$result == array(
+		array('``it`s only test %s!', '/if([\'`1\'=```1```` and /array(``, ```1]][2))`3```, \'\"]\')]/```test````,`1`,```2```)/0'),
+		array('string', 'unipath')
+	); /* ".print_r($result, true)." */");
+	
 	$func_string = "alias('table1', 'tbl1')";
 	echo "<h3>--- $func_string ---</h3>";
 	$result = __uni_parseFuncArgs($func_string);
-	assert("\$result = array(
+	assert("\$result == array(
 		array('table1', 'tbl1'),
 		array('string', 'string')
 	); /* ".print_r($result, true)." */");
@@ -751,7 +858,7 @@ echo "<h3>--- $unipath ---</h3>";
 	$func_string = "chunked('table1.Data',10000,3000)";
 	echo "<h3>--- $func_string ---</h3>";
 	$result = __uni_parseFuncArgs($func_string);
-	assert("\$result = array(
+	assert("\$result == array(
 		array('table1.Data',10000,3000),
 		array('string', 'number', 'number')
 	); /* ".print_r($result, true)." */");
