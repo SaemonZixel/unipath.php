@@ -3,7 +3,7 @@
 /**
  *  UniPath - XPath like access to DataBase, Files, XML, Arrays and any other data from PHP
  *  
- *  @version  2.2.1-beta
+ *  @version  2.2.2-beta
  *  @author   Saemon Zixel <saemonzixel@gmail.com>
  *  @link     https://github.com/SaemonZixel/unipath
  *
@@ -164,7 +164,7 @@ function __uni_with_start_data($data, $data_type, $data_tracking, $unipath) {
 			}
 		
 			// неоткуда вытаскивать, возврщаем NULL
-			return array('data' => null, 'data_type' => 'NULL', 'data_tracking' => null);
+			// return array('data' => null, 'data_type' => 'NULL', 'data_tracking' => null);
 		}
 	}
 
@@ -296,23 +296,6 @@ function __uni_with_start_data($data, $data_type, $data_tracking, $unipath) {
 	
 	return $tree_node;
 }
-
-/*function __uni_cursor($data, $data_type, &$data_tracking, $cursor_cmd = 'next', $cursor_arg1 = null) {
-	assert('is_array($data_tracking);') or debug_print_backtrace();
-	assert('isset($data_tracking["cursor()"]);');
-		
-	$call_result = call_user_func_array(
-		$data_tracking["cursor()"], array(
-		array(array(
-			'data' => $data,
-			'data_type' => $data_type,
-			'data_tracking' => $data_tracking,
-			'unipath' => "__uni_cursor($cursor_cmd)"
-		)), 
-		0, $cursor_cmd, $cursor_arg1));
-			
-	return $call_result;
-}*/
 
 class Uni extends ArrayIterator {
 	public $tree; // разобранная и выполненое дерево текущего unipath
@@ -612,6 +595,13 @@ if(!empty($GLOBALS['unipath_debug'])) {
 			$tree[$lv]['data_tracking'] = array('key()' => $name);
 		}
 		
+		// /CONST/... если начинается с названия константы
+		elseif($lv == 1 and is_string($name) and defined($name) and ! array_key_exists($name, $GLOBALS)) {
+			$tree[$lv]['data'] = constant($name);
+			$tree[$lv]['data_type'] = gettype($tree[$lv]['data']);
+			$tree[$lv]['data_tracking'] = array('key()' => $name);
+		}
+		
 		// <PDO-object/odbc-link/mysql-link>/<table_name>[...]
 		elseif($lv > 0 and is_string($name) 
 			and in_array($prev_data_type, array('object/PDO', 'resource/odbc-link', 'resource/mysql-link')) 
@@ -763,7 +753,7 @@ if(!empty($GLOBALS['unipath_debug'])) {
 								$filter[$expr]['right_sql'] = $filter[$filter[$expr]['right']]['sql'];
 								break;
 							case 'function':
-								if(in_array(strpos(strtoupper($filter[$expr]['right']), 'LIKE('), array(0,1))) {
+								if(in_array(strpos(strtoupper($filter[$expr]['right']), 'LIKE('), array(0,1), true)) {
 									list($args, $args_types) = __uni_parseFuncArgs($filter[$expr]['right']);
 									$filter[$expr]['right_sql'] = $args[0].
 										(strtoupper($filter[$expr]['right'][0]) == 'I' ? " ILIKE " : " LIKE ").
@@ -1143,8 +1133,8 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 			}
 		}
 		
-		// all()
-		elseif($name == 'all()' and isset($tree[$lv-1]['data_tracking']['cursor()'])) {
+		// all(), toArray() [cursor]
+		elseif(($name == 'all()' or $name == 'toArray()') and isset($tree[$lv-1]['data_tracking']['cursor()'])) {
 			assert('isset($tree[$lv-1]["data_tracking"]);');
 			assert('is_array($tree[$lv-1]["data_tracking"]);');
 			assert('isset($tree[$lv-1]["data_tracking"]["cursor()"]);');
@@ -3546,6 +3536,11 @@ var_dump(__FUNCTION__.'.data_tracking = ', $data_tracking);
 					isset($tree[$lv]['data_tracking']) 
 					? $tree[$lv]['data_tracking'] 
 					: array(), array('key()' => $cursor_arg1['name'])));
+					
+			$db = isset($result['data_tracking']['db']) ? $result['data_tracking']['db'] : null;
+			$db_type = is_resource($db) 
+				? 'resource/'.str_replace(' ', '-', get_resource_type($db))
+				: (is_object($db) ? 'object/'.get_class($db) : gettype($db));
 			
 			// сохраним значение ключевых колонок в трекинге если было .../columns('id KEY'...)/...
 			if(isset($result['data_tracking']['columns'])) 
@@ -3578,8 +3573,26 @@ var_dump(__FUNCTION__.'.data_tracking = ', $data_tracking);
 				else
 					continue;
 				
+				$val = $tree[$lv]['data'][$key];
+				
+				// float значения нельзя сравнивать (из-за бинарной природы) - используем диапазон
+				if(is_numeric($val) and substr_count($val, '.') == 1 and strspn($val, '123456789') > 0)
+					$result['data_tracking']['where'][$col_name] = sprintf(" BETWEEN %.3F AND %.3F", $val-0.005, $val+0.005);
+				
 				// перенесём в where значение экранировав и поставив оператор
-				$result['data_tracking']['where'][$col_name] = "= '".str_replace("'", "''", strval($tree[$lv]['data'][$key]))."'";
+				else
+				switch($db_type) {
+					case 'object/PDO':
+						$result['data_tracking']['where'][$col_name] = "= ".$db->quote(strval($val));
+						break;
+					case 'resource/mysql-link':
+						$result['data_tracking']['where'][$col_name] = "= '".mysql_real_escape_string(strval($val))."'";
+						break;
+					case 'resource/odbc-link':
+					default:
+						$result['data_tracking']['where'][$col_name] = "= '".strtr(strval($val), array("'" => "''", "\\" => "\\\\"))."'";
+				}
+					
 			}
 			
 			return $result;
