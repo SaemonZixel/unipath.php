@@ -1,3 +1,8 @@
+2018-02-13  Saemon Zixel  <saemonzixel@gmail.com>
+
+	* unipath.email.php: added extension for send emails.
+	* unipath.captcha.php: added extension for generate captcha.
+
 2016-09-02  Saemon Zixel  <saemonzixel@gmail.com>
 
 	* version 2.2.1-beta
