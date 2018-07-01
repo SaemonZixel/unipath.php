@@ -2,7 +2,7 @@
 /**
  * E-mail and MIME extension for UniPath 2.2+
  * 
- * @version 1.0
+ * @version 1.1
  * @author Saemon Zixel (saemonzixel@gmail.com)
  * @license Public Domain
  *
@@ -17,7 +17,10 @@ function _uni_asMIME() {
 function _uni_email($tree, $lv = 0) {
 
 	$result = array('data' => array(), 'data_type' => 'array/email', 
-		'metadata' => array('array/email', 'cursor()' => '_cursor_email'));
+		'metadata' => array(
+			'array/email', 
+			'cursor()' => '_cursor_email',
+			'boundary_separator' => md5(time())));
 	
 	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
 	foreach($args_types as $name => $type)
@@ -45,10 +48,10 @@ function _cursor_email($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) 
 // if($cursor_cmd != 'next')
 // var_dump($tree[$lv]['name']." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($cursor_arg1)&&isset($cursor_arg1['name'])?$cursor_arg1['name']:''));
 
-	// EVAL headers()
-	if($cursor_cmd == 'eval' and isset($cursor_arg1['name'][7]) and substr_compare($cursor_arg1['name'], "headers(", 0, 8, true) == 0) {
+	// EVAL resultHeaders()
+	if($cursor_cmd == 'eval' and isset($cursor_arg1['name'][13]) and substr_compare($cursor_arg1['name'], "resultHeaders(", 0, 14, true) == 0) {
 		
-		$boundary_separator = md5(time());
+		$boundary_separator = $tree[$lv]['metadata']['boundary_separator'];
 		$eol = "\r\n"; // PHP_EOL;
 
 		$from = $tree[$lv]['data']['from'][0];
@@ -67,15 +70,31 @@ function _cursor_email($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) 
 		
 		// заголовок в формате multipart
 		$headers .= "MIME-Version: 1.0" . $eol;
-		$headers .= "Content-Type: multipart/mixed; boundary=\"$boundary_separator\"" . $eol;
-		$headers .= "Content-Transfer-Encoding: 7bit" . $eol . $eol;
-		$headers .= "This is a MIME encoded message." . $eol . $eol;
+		$headers .= "Content-Type: multipart/mixed; boundary=\"$boundary_separator\"";
+		
+		return array(
+			'data' => $headers,
+			'data_type' => 'string',
+			'metadata' => array('string'));
+	}
+	
+	// EVAL resultMessage()
+	if($cursor_cmd == 'eval' and isset($cursor_arg1['name'][13]) and substr_compare($cursor_arg1['name'], "resultMessage(", 0, 14, true) == 0) {
+	
+		$boundary_separator = $tree[$lv]['metadata']['boundary_separator'];
+		$eol = "\r\n"; // PHP_EOL;
+	
+		// предупреждение о MIME encoded message
+		$body = "Content-Transfer-Encoding: 7bit" . $eol . $eol;
+		$body .= "This is a MIME encoded message." . $eol . $eol;
 
 		// тело сообщения
-		$headers .= "--" . $boundary_separator . $eol;
-		$headers .= "Content-Type: text/html; charset=\"utf-8\"" . $eol;
-		$headers .= "Content-Transfer-Encoding: 8bit" . $eol . $eol;
-		$headers .= $tree[$lv]['data']['body'] . $eol;
+		if(!empty($tree[$lv]['data']['body'])) {
+			$body .= "--" . $boundary_separator . $eol;
+			$body .= "Content-Type: text/html; charset=\"utf-8\"" . $eol;
+			$body .= "Content-Transfer-Encoding: 8bit" . $eol . $eol;
+			$body .= $tree[$lv]['data']['body'] . $eol;
+		}
 		
 		// прикррепляем файлы
 		if(!empty($tree[$lv]['data']['files'])) 
@@ -84,19 +103,19 @@ function _cursor_email($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) 
 			$human_filename = isset($file_rec[1]) ? $file_rec[1] : $file_rec[0];
 			$content = chunk_split(base64_encode(file_get_contents($file_rec[0])));
 			if(!empty($content)) {
-				$headers .= "--" . $boundary_separator . $eol;
-				$headers .= "Content-Type: application/octet-stream; name=\"$human_filename\"".$eol;
-				$headers .= "Content-Transfer-Encoding: base64" . $eol;
-				$headers .= "Content-Disposition: attachment; filename=\"$human_filename\"" . $eol . $eol;
-				$headers .= $content . $eol;
+				$body .= "--" . $boundary_separator . $eol;
+				$body .= "Content-Type: application/octet-stream; name=\"$human_filename\"".$eol;
+				$body .= "Content-Transfer-Encoding: base64" . $eol;
+				$body .= "Content-Disposition: attachment; filename=\"$human_filename\"" . $eol . $eol;
+				$body .= $content . $eol;
 			}
 			else
 				trigger_error("File {$file_rec[0]} is empty!", E_USER_ERROR);
 		}
-		$headers .= "--" . $boundary_separator . "--";
+		$body .= "--" . $boundary_separator . "--";
 		
 		return array(
-			'data' => $headers,
+			'data' => $body,
 			'data_type' => 'string',
 			'metadata' => array('string'));
 	}
@@ -176,13 +195,14 @@ function _cursor_email($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) 
 					? '=?UTF-8?B?'.base64_encode($to[1]).'?= <'.$to[0].'>'
 					: $to[0];
 				$subject = empty($tree[$lv]['data']['subject'])?'':'=?UTF-8?B?'.base64_encode($tree[$lv]['data']['subject']).'?=';
-				$headers = _cursor_email($tree, $lv, 'eval', array('name' => 'headers()'));
+				$headers = _cursor_email($tree, $lv, 'eval', array('name' => 'resultHeaders()'));
 // var_dump($headers);
+				$body = _cursor_email($tree, $lv, 'eval', array('name' => 'resultMessage()'));
 				$result['metadata']['last_send_result'] = call_user_func(
 					isset($GLOBALS['unipath_test_mail_function']) ? 
 						$GLOBALS['unipath_test_mail_function'] 
 						: 'mail', 
-					$to, $subject, "", 
+					$to, $subject, $body['data'], 
 					$headers['data']);
 				$result['metadata']['last_error'] = error_get_last();
 				break;
@@ -213,7 +233,7 @@ function _tests_email() {
 	$GLOBALS['unipath_test_mail_function'] = '__test_mail';
 	
 // $GLOBALS['unipath_debug'] = true;
-	$unipath = "/email()/to('root@localhost')/from('nobody@localhost')/body('123')/send()/last_send_result()";
+	$unipath = "/email()/to('root@localhost')/from('nobody@localhost')/subject(`test`)/body('123')/send()/last_send_result()";
 	echo "<h3>--- $unipath ---</h3>";
 	$result = uni($unipath);
 // print_r($result);
@@ -221,14 +241,13 @@ function _tests_email() {
 	
 // print_r($GLOBALS['unipath_test_mail_arguments']);
 	assert('$GLOBALS[\'unipath_test_mail_arguments\'][0] == "root@localhost"; /* '.var_export($GLOBALS['unipath_test_mail_arguments'][0], true).' */');
-	assert('$GLOBALS[\'unipath_test_mail_arguments\'][1] == ""; /* '.var_export($GLOBALS['unipath_test_mail_arguments'][1], true).' */');
-	assert('$GLOBALS[\'unipath_test_mail_arguments\'][2] == ""; /* '.var_export($GLOBALS['unipath_test_mail_arguments'][2], true).' */');
+	assert('$GLOBALS[\'unipath_test_mail_arguments\'][1] == "=?UTF-8?B?dGVzdA==?="; /* '.var_export($GLOBALS['unipath_test_mail_arguments'][1], true).' */');
 	
 	preg_match('~boundary="([0-9a-f]+)"~', $GLOBALS['unipath_test_mail_arguments'][3], $boundary);
 	$expect = "From: nobody@localhost\r
 MIME-Version: 1.0\r
-Content-Type: multipart/mixed; boundary=\"{$boundary[1]}\"\r
-Content-Transfer-Encoding: 7bit\r
+Content-Type: multipart/mixed; boundary=\"{$boundary[1]}\"";
+	$expect2 = "Content-Transfer-Encoding: 7bit\r
 \r
 This is a MIME encoded message.\r
 \r
@@ -245,6 +264,7 @@ Content-Transfer-Encoding: 8bit\r
 	
 	assert('$GLOBALS[\'unipath_test_mail_arguments\'][3] == $expect; /* '.var_export($GLOBALS['unipath_test_mail_arguments'][3], true).' */');
 	
+	assert('$GLOBALS[\'unipath_test_mail_arguments\'][2]["data"] == $expect2; /* '.var_export($GLOBALS['unipath_test_mail_arguments'][2], true).' */');
 }
 
 }
