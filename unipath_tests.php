@@ -2123,11 +2123,11 @@ assert("\$result == array(array(
 	office:value-type="string"><text:p text:style-name="P1">Улица</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p text:style-name="P2">Театральная 11</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell office:value-type="string"><text:p text:style-name="P1">Класс</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p text:style-name="P2">премиум</text:p></table:table-cell></table:table-row><table:table-row><table:table-cell office:value-type="string"><text:p text:style-name="P1">Кол-во этажей</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p text:style-name="P2">9</text:p></table:table-cell></table:table-row></table:table><text:p/>';
 	$unipath = '/_POST/test_xml/asXML()/h/0';
 	echo "<h3>--- $unipath ---</h3>";
-//$GLOBALS['unipath_debug'] = true; echo '<xmp>';
+// $GLOBALS['unipath_debug'] = true; echo '<xmp>';
 	$result = uni($unipath);
 //print_r($result);
 	assert('$result == "3-комн квартира на ул Труда"; /* '.json_encode($result).' */');
-//$GLOBALS['unipath_debug'] = false; echo '</xmp>';
+// $GLOBALS['unipath_debug'] = false; echo '</xmp>';
 
 	$unipath = '/_POST/test_xml/asXML()/p/4';
 	echo "<h3>--- $unipath ---</h3>";
@@ -2364,6 +2364,13 @@ echo '</xmp>';
 // 	$GLOBALS['unipath_debug'] = true;
 	$result = uni($unipath);
 	assert('$result == "stdClass"; /* '.print_r($result, true).' */');
+// 	$GLOBALS['unipath_debug'] = false;
+
+	$unipath = '/php:get_declared_classes()/php-foreach:sprintf(`class %s;`, .)/1';
+	echo "<h3>--- $unipath ---</h3>";
+// 	$GLOBALS['unipath_debug'] = true;
+	$result = uni($unipath);
+	assert('$result == "class Exception;"; /* '.print_r($result, true).' */');
 // 	$GLOBALS['unipath_debug'] = false;
 }
 

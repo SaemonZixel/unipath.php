@@ -3,7 +3,7 @@
 /**
  *  UniPath - XPath like access to DataBase, Files, XML, Arrays and any other data from PHP
  *  
- *  @version  2.2.2-beta
+ *  @version  2.2.3
  *  @author   Saemon Zixel <saemonzixel@gmail.com>
  *  @link     https://github.com/SaemonZixel/unipath
  *
@@ -17,7 +17,7 @@
  *
  *  @license  MIT
  *
- *  Copyright (c) 2013-2016 Saemon Zixel
+ *  Copyright (c) 2013-2019 Saemon Zixel
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software *  and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
  *
@@ -31,8 +31,8 @@ global $GLOBALS_data_types, $GLOBALS_data_tracking, $GLOBALS_data_timestamp,
        $__uni_prt_cnt, $__uni_benchmark, $__uni_optimize; // for PHP 5.3 and upper
 
 // для удобства сделаем часто используемые переменные глобальными (стоит ли?)
-global $i, $key, $val, $value, $row, $rows, $item, $items, $list, $data, $tmp, $temp;
-global $fp, $dbh, $html, $page, $news, $post, $article, $content, $name;
+// global $i, $key, $val, $value, $row, $rows, $item, $items, $list, $data, $tmp, $temp;
+// global $fp, $dbh, $html, $page, $news, $post, $article, $content, $name;
 
 $GLOBALS_data_types = array(); // unipath-типы некоторых переменных в $GLOBALS
 $GLOBALS_data_tracking = array(); // источники некоторых переменных в $GLOBALS
@@ -202,7 +202,7 @@ function __uni_with_start_data($data, $data_type, $data_tracking, $unipath) {
 		if(isset($tree_node['data_tracking']) and isset($tree_node['data_tracking']['cursor()'])) {
 
 			if(function_exists($tree_node['data_tracking']['cursor()']))
-				call_user_func($tree_node['data_tracking']['cursor()'], array($tree_node), 0, 'set', $set_value);
+				call_user_func_array($tree_node['data_tracking']['cursor()'], array(&$tree, $lv, 'set', $set_value));
 			else
 				trigger_error('UniPath: '.$tree_node['data_tracking']['cursor()'].' - not exist! *** ', E_USER_ERROR);
 			
@@ -303,7 +303,7 @@ class Uni extends ArrayIterator {
 	public $data_type;
 	public $data_tracking;
 
-	function Uni($unipath_or_data, $data_type = null, $data_tracking = null) {
+	function __construct($unipath_or_data, $data_type = null, $data_tracking = null) {
 	
 		// если передали данные, то обернём их в объект
 		if(func_num_args() > 1) {
@@ -726,7 +726,12 @@ if(!empty($GLOBALS['unipath_debug'])) {
 								break;
 							case 'list-of-number':
 								$filter[$expr]['right_sql'] = "(".implode(',',$filter[$expr]['right']).")";
-								$filter[$expr]['op'] = 'IN';
+								switch($filter[$expr]['op']) {
+									default:
+									case '=': $filter[$expr]['op'] = 'IN'; break;
+									case '<>':
+									case '!=': $filter[$expr]['op'] = 'NOT IN'; break;
+								}
 								break;
 							case 'list-of-string':
 							case 'list-of-string-with-N':
@@ -747,7 +752,12 @@ if(!empty($GLOBALS['unipath_debug'])) {
 											array_map(create_function('$a', 'retrun str_replace("\'","\'\'",$a);'),
 											$filter[$expr]['right']))."')";
 								}
-								$filter[$expr]['op'] = 'IN';
+								switch($filter[$expr]['op']) {
+									default:
+									case '=': $filter[$expr]['op'] = 'IN'; break;
+									case '<>':
+									case '!=': $filter[$expr]['op'] = 'NOT IN'; break;
+								}
 								break;
 							case 'expr':
 								$filter[$expr]['right_sql'] = $filter[$filter[$expr]['right']]['sql'];
@@ -771,6 +781,10 @@ if(!empty($GLOBALS['unipath_debug'])) {
 									$filter[$expr]['right_sql'] = '('.$args[0].')';
 									$filter[$expr]['op'] = 'IN';
 								} 
+								elseif(substr_compare($filter[$expr]['right'], 'sql(', 0, 4, true) == 0) {
+									list($args, $args_types) = __uni_parseFuncArgs($filter[$expr]['right']);
+									$filter[$expr]['right_sql'] = $args[0];
+								}
 								// кастыль для MS SQL Server
 								elseif(substr_compare($filter[$expr]['right'], 'like2(', 0, 5, true) == 0) {
 									$filter[$expr]['right_sql'] = iconv('UTF-8', 'WINDOWS-1251', preg_replace("~like2\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 LIKE $2'$3'", $filter[$expr]['right']));
@@ -906,7 +920,7 @@ if(!empty($GLOBALS['unipath_debug'])) {
 					} else
 					if(strlen($tree[$i]['name']) >= 9 and substr_compare($tree[$i]['name'], 'group_by(', 0, 9, true) == 0) {
 						list($args, $args_types) = __uni_parseFuncArgs($tree[$i]['name']);
-						foreach($func_args as $key => $val) {
+						foreach($args as $key => $val) {
 							if(!empty($sql_group_by))
 								$sql_group_by .= ', '.$val;
 							else
@@ -1314,12 +1328,20 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 		}
 		
 		// php:*(), php_*()
-		elseif(strpos($name, '(') > 5 and (strncmp($name, 'php_', 4) == 0 or strncmp($name, 'php:', 4) == 0)) {
+		elseif(strpos($name, '(') > 5 and (strncmp($name, 'php_', 4) == 0 or strncmp($name, 'php:', 4) == 0 or strncmp($name, 'php-foreach:', 12) == 0)) {
+		
 			$func_name = substr($name, 4, strpos($name, '(')-4);
 			list($args, $args_types) = __uni_parseFuncArgs($name);
-			if(empty($args) and strncmp($name, 'php_', 4) == 0) // для совместимости со старым кодом
+			
+			// php_<func()> - для совместимости со старым кодом
+			if(empty($args) and strncmp($name, 'php_', 4) == 0) { 
 				$args = array($tree[$lv-1]['data']);
-			else {
+				$tree[$lv]['data'] = call_user_func_array($func_name, $args);
+				$tree[$lv]['data_type'] = gettype($tree[$lv]['data']);
+			}
+				
+			// php:func(...)
+			elseif(strncmp($name, 'php:', 4) == 0) {
 				for($i=0; $i < count($args); $i++)
 					if($args[$i] == '.') 
 						$args[$i] = $tree[$lv-1]['data'];
@@ -1332,9 +1354,77 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 						);
 						$args[$i] = $args[$i]['data'];
 					}
+				$tree[$lv]['data'] = call_user_func_array($func_name, $args);
+				$tree[$lv]['data_type'] = gettype($tree[$lv]['data']);
 			}
-			$tree[$lv]['data'] = call_user_func_array($func_name, $args);
-			$tree[$lv]['data_type'] = gettype($tree[$lv]['data']);
+			
+			// php-foreach:func(...)
+			elseif(strncmp($name, 'php-foreach:', 12) == 0) {
+				$func_name = substr($name, 12, strpos($name, '(')-12);
+				list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
+				$tree[$lv]['data'] = array();
+				$tree[$lv]['data_type'] = 'array';
+
+				// подготавливаем cursor() если это он
+				if(isset($tree[$lv-1]["data_tracking"], $tree[$lv-1]["data_tracking"]['cursor()'])) {
+					global $__uni_prt_cnt;
+					$data = new SplFixedArray($__uni_prt_cnt);
+					$cursor_ok = call_user_func_array(
+						$tree[$lv-1]["data_tracking"]['cursor()'],
+						array(&$tree, $lv-1, 'rewind'));
+
+					if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.'(php-foreach): $cursor_ok = '.var_export($cursor_ok, true));
+					
+					if($cursor_ok === false) {
+						trigger_error(__FUNCTION__.'(php-foreach): '.$tree[$lv-1]["data_tracking"]['cursor()'].'(rewind) return '.var_export($cursor_ok, true), E_USER_NOTICE);
+						return array('data' => null, 'data_type' => 'null');
+					}
+					
+					// вернули одиночное значение
+					elseif($cursor_ok !== true)
+						$data = (array) $cursor_ok;
+				}
+		
+				// любой другой тип данных приводим к массиву
+				else
+					$data = (array) $tree[$lv-1]["data"];
+
+				foreach($data as $key => $item) {
+
+					// если это курсор, то берём следующий элемент
+					if(isset($cursor_ok) and $cursor_ok = call_user_func_array($tree[$lv-1]["data_tracking"]['cursor()'], array(&$tree, $lv-1, 'next')) and isset($cursor_ok['data'][0])) {
+						$item = $cursor_ok['data'][0];
+						$key = isset($cursor_ok['data_tracking']['key()'])
+							? $cursor_ok['data_tracking']['key()']
+							: $key;
+					}
+					elseif(isset($cursor_ok))
+						break;
+
+					$args2 = $args;
+					for($i=0; $i < count($args2); $i++)
+						if($args2[$i] == '.') 
+							$args2[$i] = $item;
+						elseif($args_types[$i] == 'unipath') {
+							$args2[$i] = __uni_with_start_data(
+								$item, null,
+								array(gettype($item), 'key()' => $key),
+								$args2[$i]
+							);
+							$args2[$i] = $args2[$i]['data'];
+						}
+
+					$tree[$lv]['data'][$key] = call_user_func_array($func_name, $args2);
+// var_dump(__FUNCTION__.'(php-foreach): ', $tree[$lv]['data'][$key], $func_name, $args2);
+				}
+
+				// одиночное значение преобразуем обратно (?)
+				if(!is_array($tree[$lv-1]["data"]) and !isset($tree[$lv-1]["data_tracking"]['cursor()'])) {
+					$tree[$lv]['data'] = current($tree[$lv]['data']);
+					$tree[$lv]['data_type'] = $tree[$lv]['data'];
+				}
+// var_dump($tree[$lv]['data'], $tree[$lv]['data_type']);
+			}
 		}
 		
 		// .[]/...%s...[] - повторная фильтрация данных с шаблоном ключя или без
@@ -1940,13 +2030,11 @@ if(!empty($GLOBALS['unipath_debug'])) {
 	// закончился unipath?
 	if(isset($tree[$lv+1]) == false) { 
 if(!empty($GLOBALS['unipath_debug'])) { 
-	if($tree[0]['data'] == $GLOBALS) {
-		unset($tree[0]['data']); // & <- !!!
-		$tree[0]['data'] = '*** $GLOBALS ***';
-		print_r($tree);
-		$tree[0]['data'] = & $GLOBALS;
-	} else	
-		print_r($tree);
+	echo "<br>------------<br>\n";
+	if(isset($tree[$lv-1]['data']) and is_array($tree[$lv-1]['data']) and isset($tree[$lv-1]['data']['GLOBALS'], $tree[$lv-1]['data']['GLOBALS']['GLOBALS'], $tree[$lv-1]['data']['GLOBALS']['GLOBALS']['GLOBALS'])) 
+		print_r(array_merge($tree[$lv-1], array('data' => '*** $GLOBALS ***')));
+	else
+		print_r($tree[$lv-1]);
 }
 		return $tree;
 	} 
@@ -1961,8 +2049,16 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('Parsing - '.$xpath);
 		// временно переключим mbstring.func_overload в 1-байтовую кодировку
 		if(ini_get('mbstring.func_overload') > 1) {
-			$mbstring_internal_encoding = ini_get('mbstring.internal_encoding');
-			ini_set('mbstring.internal_encoding', 'ISO-8859-1');
+			if (version_compare(PHP_VERSION, '5.6.0') < 0) {
+				$mbstring_internal_encoding = ini_get('mbstring.internal_encoding');
+				ini_set('mbstring.internal_encoding', 'ISO-8859-1');
+			}
+			else {
+// 				$mbstring_internal_encoding = ini_get('default_charset');
+// 				ini_set('default_charset', 'ISO-8859-1');
+				$mbstring_internal_encoding = mb_internal_encoding();
+				mb_internal_encoding("iso-8859-1");
+			}
 		}
 
 		$tree = array();
@@ -2044,9 +2140,9 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("0:$p => ".substr($xpath, 0
 			
 			// названия поля/оси
 			// strpos('qwertyuiopasdfghjklzxcvbnm_*@0123456789.$', strtolower($xpath[$p]))
-			if(strpos("\\|/,+[](){}?!~`'\";#^&=- \n\t", $xpath[$p]) === false) {
+			if(strpos("\\|/,+[](){}?!~`'\";#^&=- \n\t\r", $xpath[$p]) === false) {
 				$start_p = $p;
-				$len = strcspn($xpath, "\\|/,+[](){}?!~`'\";#^&= \t\n", $start_p);
+				$len = strcspn($xpath, "\\|/,+[](){}?!~`'\";#^&= \n\t\r", $start_p);
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("fieldname detected: $p,$len = ".substr($xpath, $start_p, $len));
 				$p += $len;
 
@@ -2286,8 +2382,8 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_closed - $p"
 					
 					// and, or
 					if(stripos($xpath, 'and ', $p) == $p or stripos($xpath, 'or ', $p-1) == $p) {
-						$op = $xpath[$p] == 'a' ? 'and' : 'or';
-						$p += $xpath[$p] == 'a' ? 3 : 2;
+						$op = ($xpath[$p] == 'a' or $xpath[$p] == 'A') ? 'and' : 'or';
+						$p += ($xpath[$p] == 'a' or $xpath[$p] == 'A') ? 3 : 2;
 
 						if($expr_key == 'left') {
 							$filter[$expr]['op'] = $op;
@@ -2303,7 +2399,7 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_closed - $p"
 							else $old_expr = $filter[$old_expr]['next'];
 
 						// прикрепляемся справа (продолжаем цепочку)
-						if(in_array($filter[$old_expr]['op'], array('*','div','mod', '+','-', '=','>','<','>=','<=', 'and', 'or'))
+						if(in_array($filter[$old_expr]['op'], array('*','div','mod', '+','-', '=','>','<','>=','<=', '<>', '!=', 'and', 'or'))
 							and empty($filter[$old_expr]['open_braket'])) {
 							$expr = 'expr'.($next_expr_num++);
 							$filter[$expr] = array(
@@ -2446,13 +2542,15 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_closed - $p"
 						$filter[$expr][$expr_key.'_type'] = 'number';
 
 						// возможно это список чисел
+						while(strpos(" \n\t", $xpath[$p]) !== false) $p++;
 						if($xpath[$p] == ',') {
 							$filter[$expr][$expr_key.'_type'] = 'list-of-number';
 							$filter[$expr][$expr_key] = array($filter[$expr][$expr_key]);
-							$p++;
 							
-							$len = strspn($xpath, '0123456789,', $p);
-							$filter[$expr][$expr_key] = array_merge($filter[$expr][$expr_key], explode(',', substr($xpath, $p, $len)));
+							$len = strspn($xpath, "0123456789,\n\t ", $p);
+							foreach(array_map('trim', explode(',', substr($xpath, $p, $len))) as $item)
+								if(is_numeric($item))
+									$filter[$expr][$expr_key][] = $item;
 							$p += $len;
 						}
 							
@@ -2715,7 +2813,11 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump(substr($xpath, $p));
 
 		// вернём обратно кодировку mbstring если включена
 		if(ini_get('mbstring.func_overload') > 1) {
-			ini_set('mbstring.internal_encoding', $mbstring_internal_encoding);
+			if (version_compare(PHP_VERSION, '5.6.0') < 0)
+				ini_set('mbstring.internal_encoding', $mbstring_internal_encoding);
+			else
+// 				ini_set('default_charset', $mbstring_internal_encoding);
+				mb_internal_encoding($mbstring_internal_encoding);
 		}
 			
 		return $tree;
@@ -2726,8 +2828,16 @@ function __uni_parseFuncArgs($string) {
 	
 	// временно переключим mbstring.func_overload в 1-байтовую кодировку
 	if(ini_get('mbstring.func_overload') > 1) {
-		$mbstring_internal_encoding = ini_get('mbstring.internal_encoding');
-		ini_set('mbstring.internal_encoding', 'ISO-8859-1');
+		if (version_compare(PHP_VERSION, '5.6.0') < 0) {
+			$mbstring_internal_encoding = ini_get('mbstring.internal_encoding');
+			ini_set('mbstring.internal_encoding', 'ISO-8859-1');
+		}
+		else {
+// 			$mbstring_internal_encoding = ini_get('default_charset');
+// 			ini_set('default_charset', 'ISO-8859-1');
+			$mbstring_internal_encoding = mb_internal_encoding();
+			mb_internal_encoding("iso-8859-1");
+		}
 	}
 	
 	$result = array(); $result_types = array();
@@ -2967,7 +3077,11 @@ if(!empty($GLOBALS['unipath_debug'])) echo(" <-- $mode \n |".substr($string, $p,
 	
 	// вернём обратно кодировку mbstring если включена
 	if(ini_get('mbstring.func_overload') > 1) {
-		ini_set('mbstring.internal_encoding', $mbstring_internal_encoding);
+		if (version_compare(PHP_VERSION, '5.6.0') < 0)
+			ini_set('mbstring.internal_encoding', $mbstring_internal_encoding);
+		else
+// 			ini_set('default_charset', $mbstring_internal_encoding);
+			mb_internal_encoding($mbstring_internal_encoding);
 	}
 	
 	return array($result, $result_types);
@@ -6351,6 +6465,21 @@ print_r($result);
 }
 
 function _cursor_asXml_parseXML($string, $tag_name) {
+
+	// временно переключим mbstring.func_overload в 1-байтовую кодировку
+	if(ini_get('mbstring.func_overload') > 1) {
+		if (version_compare(PHP_VERSION, '5.6.0') < 0) {
+			$mbstring_internal_encoding = ini_get('mbstring.internal_encoding');
+			ini_set('mbstring.internal_encoding', 'ISO-8859-1');
+		}
+		else {
+// 			$mbstring_internal_encoding = ini_get('default_charset');
+// 			ini_set('default_charset', 'ISO-8859-1');
+			$mbstring_internal_encoding = mb_internal_encoding();
+			mb_internal_encoding("iso-8859-1");
+		}
+	}
+
 	// стартовый контекст
 	$call = array('find_node', 
 		'xml_as_string' => $string, 
@@ -6396,12 +6525,14 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump($block);
 				continue 2;
 				
 			case 'next_tag_found':
-				if($call['called']['tag_start'] === false) 
-					return array(
+				if($call['called']['tag_start'] === false) {
+					$result = array(
 						'data' => $call['result_data'], 
 						'data_type' => $call['result_data_type'],
 						'data_tracking' => $call['result_data_tracking']);
 					//return array('data' => null, 'data_type' => 'null');
+					break 2;
+				}
 			
 				// <?xml...
 				if(substr_compare($block, '<?xml', $call['called']['tag_start'], 5, true) == 0) {
@@ -6514,8 +6645,19 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('found_close_tag = '.substr($bloc
 				continue 2;
 		}
 		
-
 	}
+	
+	// вернём обратно кодировку mbstring если включена
+	if(ini_get('mbstring.func_overload') > 1) {
+		if (version_compare(PHP_VERSION, '5.6.0') < 0)
+			ini_set('mbstring.internal_encoding', $mbstring_internal_encoding);
+		else
+// 			ini_set('default_charset', $mbstring_internal_encoding);
+			mb_internal_encoding($mbstring_internal_encoding);
+	}
+	
+	// вернём успешный результат если есть
+	if(isset($result)) return $result;
 	
 	error_log('_uni_xml().prt_cnt!');
 	return array('data' => null, 'data_type' => 'null');

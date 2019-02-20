@@ -1,9 +1,9 @@
 UniPath
 =======
 
-Library for universal access to any data from PHP script (similar to xpath with jquery philosophy).
+The library for universal access to any data from a PHP script (similar to xpath with jquery philosophy).
 
-Stable version: [unipath-2.2.2.php](https://github.com/SaemonZixel/unipath.php/raw/master/unipath.php)\
+Stable version: [unipath-2.2.3.php](https://github.com/SaemonZixel/unipath.php/raw/master/unipath.php)\
 Development version (have bugs!): [unipath-2.4.php](https://github.com/SaemonZixel/unipath.php/raw/master/unipath-2.4.php)
 
 DataBase
@@ -79,9 +79,17 @@ DataBase
 	//  456 => array('id' => 2, 'field1' => 456, 'field2' => 'abc')
 	// )
 	
+	Bracket grouping of the WHERE-clauses is supported partially yet.
+	
 	
 DataBase (UPDATE, INSERT, DELETE)
 ---------------------------------
+
+	Warning: the beta version of the library may contain bugs, that can delete or damage your data in the database.
+
+	Supported database drivers: ODBC, PDO, mysql_*.
+	
+	For MS SQL Server there are special functions top(), sql_iconv(), like2(), chunked(), which have not been described yet.
 
 	uni("/db1/table1[id = 1]", array('field1' => 999))
 	// array('field1' => 999)
@@ -110,7 +118,7 @@ DataBase (UPDATE, INSERT, DELETE)
 	uni('/db1/table1[]/2', array('field1' => 789))
 	// array('field1' => 789)
 	//
-	// Notice: the uni() will do silent assignment! no Notice, no Warning!
+	// Notice: the uni() will do a silent assignment! no Notice, no Warning!
 	
 	uni("/db1/table1/new_row()", array('id' => 3, 'field1' => 999, 'field2' => 'xxx'))
 	// array('id' => 3, 'field1' => 999, 'field2' => 'xxx')
@@ -155,7 +163,7 @@ Array
 	uni("/array1/.")
 	// array('aaa' => 111, 'bbb' => 222, 'ccc' => 333)
 	//
-	// Notice: dot "." is work like self() in XPath
+	// Notice: dot "." works like self() in XPath
 	
 	uni("/array1/./././././.")
 	// array('aaa' => 111, 'bbb' => 222, 'ccc' => 333);
@@ -174,6 +182,10 @@ Array
 	
 	uni("/array1/aa%s[. > 111]")
 	// array('aab' => 112)
+	
+	// condition: to skip or not
+	uni("/array1/[aaa > 200]")
+	// null
 	
 OOP
 ---
@@ -234,26 +246,26 @@ Files
 -----
 
 	uni("/fs()/etc/passwd/contents()")
-	// ... contents of the file 'passwd' ...
+	// ... contents of the 'passwd' file ...
 	
 	$filename = '/etc/passwd';
 	uni("/filename/asFile()/contents()")
-	// ... contents of the file 'passwd' ...
+	// ... contents of the 'passwd' file ...
 	
 	$dirname = '/etc';
 	uni("/dirname/asDirectory()/passwd/contents()")
-	// ... contents of the file 'passwd' ...
+	// ... contents of the 'passwd' file ...
 	
 Image
 -----
 
 	uni("/fs()/images/image1.jpg/asImageFile()/resize(400, 500, 'fill')/crop(400, 500)/saveAs('/images/image1b.png')")
-	// (save resized and croped image as '/images/image1b.png')
+	// (to save resized and croped image as '/images/image1b.png')
 	
 class Uni
 ---------
 
-Class Uni extends ArrayIterator and work like Array.
+Class Uni extends ArrayIterator and works like Array.
 
 	$rows = new Uni('/db1/table1[]')
 	// object(Uni)
@@ -298,7 +310,7 @@ Cache
 	uni('cached(/cached_var1, /db1/table1[id=1])/0')
 	// array('id' => 1, 'field1' => 111, 'field2' => 'ccc');
 	//
-	// You can write cached($cached_var1, ...) its equal
+	// You can write cached($cached_var1, ...) it is equal
 	
 	uni('cached(/cached_var1)/0/id')
 	// 1

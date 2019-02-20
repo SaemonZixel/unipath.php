@@ -1,8 +1,21 @@
+2019-02-20  Saemon Zixel  <saemonzixel@gmail.com>
+	
+	* version 2.2.3: now compatible with php 7.x
+	* php-foreach: added
+	* many bug fixes
+	
 2018-02-13  Saemon Zixel  <saemonzixel@gmail.com>
 
-	* unipath.email.php: added extension for send emails.
-	* unipath.captcha.php: added extension for generate captcha.
+	* unipath.email.php: extension is added for sending emails.
+	* unipath.captcha.php: extension is added for generating captcha.
 
+2017-02-15  Saemon Zixel  <saemonzixel@gmail.com>
+	
+	* version 2.2.2 
+	* SQL: fixed an issue with float in SQL WHERE clouse 
+	* /CONST added
+	* toArray() repaired
+	
 2016-09-02  Saemon Zixel  <saemonzixel@gmail.com>
 
 	* version 2.2.1-beta
@@ -18,54 +31,54 @@
 	* /[...]/ pass or not to pass
 	* cached(var_name, unipath_to_cache) - new style of function cache()
 	* if(<unipath>, <if_true>, <if_false>), regexp(), wrap() - can accept right as second argument, translit() - now invertible, untranslit() - invert translit() result, sprintf(), sprintf1()
-	* globalize some common variables
-	* some bugfixes and new bugs
+	* some common variables were globalized
+	* some bug fixes and new bugs
 
 2016-05-09  Saemon Zixel  <saemonzixel@gmail.com>
 
 	* version 2.1-dev
-	* SQL: sql_result_cache(...) for reiterate, support NULL on update
+	* SQL: sql_result_cache(...) for reiterating, NULL support on update
 	* OOP: Class::<static_method>(), Class::<__construct | Class>() -> new Class(), Object-><property>, Object-><method>(arg1, ...)
-	* next_with_key(), next() dasn`t accept arguments now!
-	* unipath_tests.php: auto search extensions and launch tests from them
-	* unipath.linedoc.php: extension for parse LineDocument format
-	* some bugfixes
+	* next_with_key(), next() don`t accept arguments now!
+	* unipath_tests.php: auto search extensions and launching tests from them
+	* unipath.linedoc.php: the extension for to parse LineDocument format
+	* some bug fixes
 
 2016-04-18  Saemon Zixel  <saemonzixel@gmail.com>
 	
 	* version 2.0.1-dev
-	* class Uni: refactored and repeared, add Uni::<func_name>(args) for easy call _uni_<func_name>()
+	* class Uni: refactored and repaired, add Uni::<func_name>(args) for an easy call of _uni_<func_name>()
 	* SQL: table1++table2 -> table1 LEFT OUTER JOIN table2
-	* bugfixes in resize()
-	* next(arg1, arg2) - return array(arg1, arg2) for next data element
-	* same bugfixes and new tests
+	* bug fixes in resize()
+	* next(arg1, arg2) - returns array(arg1, arg2) for the next data element
+	* same bug fixes and new tests
 
 2016-04-08  Saemon Zixel  <saemonzixel@gmail.com>
 
 	* version 2.0-dev
-	* cursor() - new interface for extensions. All extensions/function changed to work as cursor().
-	* __uni_parseFunc(): parse named arguments (example: /array(id = 1, value1 = 'test'))
-	* .../...%s... - sscanf can be used to filter by key
-	* __uni_parseFunc(): `, ```, ``````` - recognize for indicating the beginning and end of the string
+	* cursor() - a new interface for the extensions. All the extensions/functions changed to work as the cursor().
+	* __uni_parseFunc(): parses the arguments (example: /array(id = 1, value1 = 'test'))
+	* .../...%s... - sscanf can be used to filter by a key
+	* __uni_parseFunc(): `, ```, ``````` - is beeing recognized as the beginning and the end of the string  
 	* SQL: now data in database can be changed using uni()!
-	* SQL: new_row() - for INSERT queries, last_error(), last_insert_id(), last_affected_rows(), group_by() - fro GROUP BY clause
+	* SQL: new_row() - for INSERT queries, last_error(), last_insert_id(), last_affected_rows(), group_by() - for GROUP BY clause
 	* SQL: support mysql_* added
-	* class Uni(): for OOP style programing. Implement ArrayIterator interface! But can be buggy :(
-	* ZIP: asZipFile() - for read zip-archives, .../NNN/contents(), .../NNN/saveAs()
+	* class Uni(): for OOP style programming. Implements ArrayIterator interface! But can be buggy :(
+	* ZIP: asZipFile() - for reading the zip-archives, .../NNN/contents(), .../NNN/saveAs()
 	* new functions: first(), next(), all(), ifNull(), url(), open(), replace() - to map array items, array() - to create arrays on the fly, key(), key(name%i), normalize_float()
-	* deleted $uni_cache_data. Now cache() save data in $GLOBALS!
+	* deleted $uni_cache_data. Now cache() saves data in $GLOBALS!
 	* trigger_error() - used for all internal errors and warnings
-	* $__uni_optimeze - default is 1 (optimize simple unipaths)
+	* $__uni_optimeze - default is 1 (to optimize simple unipaths)
 	* $GLOBALS['unipath_benchmark']: true - for internal measuring execution time
-	* many bugfixes, tests and new bugs...
+	* many bug fixes, tests and new bugs...
 	
 2016-02-07  Saemon Zixel  <saemonzixel@gmail.com>
 
 	* version 1.7.8dev
-    * SQL: empty filter or with half expression
+    * SQL: an empty filter or with a half expression
     * set(./, ./), toURLTranslit(), url_seg()
-    * strings in unipath segments with delimiters: ', ", `, ```.
-    * bugfixes and new tests
+    * strings in the unipath segments with delimiters: ', ", `, ```.
+    * bug fixes and new tests
 
 2015-07-05 Saemon Zixel  <saemonzixel@gmail.com>
 
@@ -73,19 +86,19 @@
 	* SQL: ilike()
 	* Image: asImageFile(), resize(), crop(), watermark(), saveAs()
 	* fs(), basename(), url(), url()/contents() use sockets, split()+arrays, array_flat(), plus_procents()
-	* secondary filtering can use key() in filter and list of string on right hand expression
-	* many bugfixes and new bugs...
+	* secondary filtering can use a key() in the filter and a list of strings in the right hand expression
+	* many bug fixes and new bugs...
     
 2015-04-10 Saemon Zixel  <saemonzixel@gmail.com>
 
-	* assign repaired, but little functional.
+	* assignment is repaired, but little not very functional.
     * asXML(), ArrayToXML(), decode_url()
-    * many bugfixes and new bugs
+    * many bug fixes and new bugs
     
 2015-02-16 Saemon Zixel  <saemonzixel@gmail.com>
 	
 	* unipath.php: many changes...
-	* unipath_tests.php: tests for parsing and evaluting
+	* unipath_tests.php: tests for parsing and evaluаting
     
 2015-01-22 Saemon Zixel  <saemonzixel@gmail.com>
 	
@@ -94,4 +107,4 @@
 2014-11-11 Saemon Zixel  <saemonzixel@gmail.com>
 	
 	* version 1.4-alpha
-	* unipath.php: base functional
+	* unipath.php: basic functionality
