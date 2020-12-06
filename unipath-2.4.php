@@ -1,9 +1,9 @@
 <?php
 
 /**
- *  UniPath - XPath like access to DataBase, Files, XML, Arrays and any other data from PHP
+ *  UniPath - XPath like access to DataBases, Files, XML, Arrays and any other data from PHP
  *  
- *  @version  2.4-beta
+ *  @version  2.4rc2
  *  @author   Saemon Zixel <saemonzixel@gmail.com>
  *  @link     https://github.com/SaemonZixel/unipath
  *
@@ -12,12 +12,12 @@
  *  Позваляет читать и манипулировать, в том числе и менять, как локальные переменные внутри программы,
  *  так и в файлы на диске, таблицы в базе данных, удалённые ресурсы и даже менять на удалённом сервере 
  *  параметры запущенного приложения или считать запись access.log по определённой дате и подстроке UserAgent и т.д.
- *  Но всё это в светлом будущем:) Сейчас реализованна только маленькая часть.
+ *  Но всё это в светлом будущем:) Сейчас реализованна только основная небольшая часть всего этого.
  *
  *
  *  @license  MIT
  *
- *  Copyright (c) 2013-2018 Saemon Zixel
+ *  Copyright (c) 2013-2021 Saemon Zixel
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software *  and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
  *
@@ -28,17 +28,13 @@
  */
 
 global $GLOBALS_metadata, $GLOBALS_data_timestamp, 
-       $__uni_prt_cnt, $__uni_benchmark, $__uni_optimize; // for PHP 5.3 and upper
-
-// для удобства сделаем часто используемые переменные глобальными (стоит ли?)
-// global $i, $key, $val, $value, $row, $rows, $item, $items, $list, $list_item, $data, $name, $tmp, $temp;
-// global $fp, $filename, $dbh, $sql, $html, $page, $news, $post, $article, $content, $result;
+       $__uni_version, $__uni_prt_cnt, $__uni_benchmark, $__uni_optimize; // for PHP 5.3 and upper
 
 $GLOBALS_metadata = array(); // источники некоторых переменных в $GLOBALS
 $GLOBALS_data_timestamp = array(); // timestamp если были закешированны
 
 $__unipath_php_file = __FILE__; // кто и где мы
-
+$__uni_version = 2.4; // наша версия
 $__uni_prt_cnt = 100000; // лимит интераций циклов, защитный счётчик от бесконечного зацикливания
 $__uni_optimize = 1; // 0 - off; 1 - optimeze: /abc, ./abc, ./`abc`, .
 $__uni_benchmark = array(); // для статистики скорости обработки unipath запросов
@@ -55,8 +51,7 @@ function uni($unipath) {
 		
 	$uni_result = __uni_with_start_data(null, null, null, $unipath);
 	
-// if(!isset($uni_result['data'])) var_dump("!!!", $uni_result);
-if(!isset($uni_result['metadata'][0])) var_dump("!!!", $uni_result);
+if(!empty($GLOBALS['unipath_debug']) and !isset($uni_result['metadata'][0])) var_dump("Uni: metadata[0] is empty!", $uni_result);
 
 	// cursor() - вытаскиваем все данные тогда
 	if(isset($uni_result['metadata']['cursor()'])) {
@@ -108,7 +103,8 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni: {$metadata['cursor()']}(nex
 }
 
 // тот-же uni(), но с указанием стартовых данных
-// $data_tracking = array('<data_type>', 'pos()' => 1, 'key()' => 1, ...)
+// $metadata = array('<data_type>', 'pos()' => 1, 'key()' => 1, ...)
+// $data_type - параметр остался для совместимости
 function __uni_with_start_data($data, $data_type, $metadata, $unipath) {
 
 	if(empty($unipath) and $unipath !== 0) {
@@ -234,9 +230,11 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.": failed");
 
 			// если это cursor()
 			if(isset($metadata['cursor()'])) {
-				if(function_exists($metadata['cursor()']))
-					call_user_func($metadata['cursor()'], array($tree[$i]), 0, 'set', $tree[$prev_i]['data'], $tree[$prev_i]['metadata'][0], 
-					$tree[$prev_i]['metadata']);
+				if(function_exists($metadata['cursor()'])) {
+					$tmp_tree = array($tree[$i]);
+					call_user_func_array($metadata['cursor()'], array(&$tmp_tree, 0, 'set', $tree[$prev_i]['data'], $tree[$prev_i]['metadata'][0], 
+					$tree[$prev_i]['metadata']));
+				}
 				else
 					trigger_error('UniPath.'.__FUNCTION__.': function '.$metadata['cursor()'].'() not defined! *** ', E_USER_ERROR);
 					
@@ -296,14 +294,19 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.": failed");
 }
 
 class Uni extends ArrayIterator {
-	public $tree; // разобранная и выполненое дерево текущего unipath
-	public $data; // текущие данные последнего узла в дереве
-	public $metadata;
+	public $tree = array(); // разобранное и выполненое дерево текущего unipath
+	public $data = null; // текущие данные последнего узла в дереве
+	public $metadata = array('null');
 
-	function Uni($unipath_or_data, $metadata = null) {
+	function __construct($unipath_or_data, $metadata = null) {
+	
+		// попросили пустой объект
+		if(func_num_args() == 0) {
+			return $this;
+		}
 	
 		// если передали данные, то обернём их в объект
-		if(func_num_args() > 1) {
+		elseif(func_num_args() > 1) {
 			$this->tree = array(
 				array(
 					'name' => '', 
@@ -327,6 +330,17 @@ class Uni extends ArrayIterator {
 		$this->unipath = $this->tree[$lv]['unipath'];
 		$this->data =& $this->tree[$lv]['data'];
 		$this->metadata =& $this->tree[$lv]['metadata'];
+	}
+	
+	static function fromCursor($tree, $lv) {
+		$result = new self();
+		$result->tree = array();
+		for($i = 0; $i <= $lv; $i++)
+			$result->tree[] =& $tree[$i];
+		$result->unipath = $tree[$lv]['unipath'];
+		$result->data =& $tree[$lv]['data'];
+		$result->metadata =& $tree[$lv]['metadata'];
+		return $result;
 	}
 	
 	function rewind() { 
@@ -362,9 +376,13 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__.'()');
 		// cursor()
 		if(isset($this->current_cursor_result)) {
 if(!empty($GLOBALS['unipath_debug']))  var_dump('Uni->current(): cursor()');
-			return new Uni(
-				$this->current_cursor_result['data'], 
-				$this->current_cursor_result['metadata']);
+
+			if(array_key_exists('cursor()', $this->current_cursor_result['metadata']) != false)
+				return new Uni(
+					$this->current_cursor_result['data'], 
+					$this->current_cursor_result['metadata']);
+			else
+				return $this->current_cursor_result['data'];
 		} 
 		elseif(property_exists($this, 'current_cursor_result')) {
 			return null;
@@ -372,7 +390,7 @@ if(!empty($GLOBALS['unipath_debug']))  var_dump('Uni->current(): cursor()');
 		
 		// normal data
 		$result = current($this->data);
-		return new Uni($result, array(gettype($result)));
+		return $result;
 	}
 	
 	function key() { 
@@ -403,11 +421,12 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__.'()');
 			if(empty($call_result) or empty($call_result['data']))
 				$this->current_cursor_result = null;
 			else {
+				$data = reset($call_result['data']);
 				$this->current_cursor_result = array(
-					'data' => $call_result['data'][0], 
-					'metadata' => isset($call_result['metadata']['each_metadata'], $call_result['metadata']['each_metadata'][0])
-						? $call_result['metadata']['each_metadata'][0]
-						: array(gettype($call_result['data'][0]), 'key()' => null));
+					'data' => $data, 
+					'metadata' => isset($call_result['metadata']['each_metadata'], $call_result['metadata']['each_metadata'][key($call_result['data'])])
+						? $call_result['metadata']['each_metadata'][key($call_result['data'])]
+						: array(gettype($data), 'key()' => null));
 			}
 			return $this->current();
 		}
@@ -458,9 +477,15 @@ if(!empty($GLOBALS['unipath_debug']))  var_dump("Uni->".__FUNCTION__.'()');
 	function offsetUnset($offset_as_unipath) { return true; }
 	
 	function offsetSet($offset_as_unipath, $set_value) {
-		/* Not implemented... */
-// 		trigger_error("Not implemented! Uni->offsetSet('$offset_as_unipath') = ...", E_USER_NOTICE);
-		
+		// (кастыль) для строки из базы нужно дозаполнить metadata
+		if (strpos($this->metadata[0], '/db-row-value') > 0 or strpos($this->metadata[0], '/db-row') > 0) {
+			$lv = count($this->tree)-1;
+			$this->metadata['cursor()'] = $this->tree[$lv-1]['metadata']['cursor()'];
+			$this->metadata['db'] = $this->tree[$lv-1]['metadata']['db'];
+			$this->metadata['columns'] = $this->tree[$lv-1]['metadata']['columns'];
+			$this->metadata['tables'] = $this->tree[$lv-1]['metadata']['tables'];
+		}
+	
 		return __uni_with_start_data(
 			$this->data, 
 			$this->metadata[0],
@@ -477,8 +502,8 @@ if(!empty($GLOBALS['unipath_debug']))  var_dump("Uni->".__FUNCTION__.'()');
 			$this->metadata,
 			$offset_as_unipath
 			);
-			
-		if(array_key_exists('data', $uni_result) == false)
+
+		if(array_key_exists('cursor()', $uni_result['metadata']) != false)
 			return new Uni($uni_result['data'], $uni_result['metadata']);
 		else
 			return $uni_result['data'];
@@ -535,9 +560,68 @@ if(!empty($GLOBALS['unipath_debug']))  var_dump("Uni->".__FUNCTION__.'()');
 	}
 }
 
+abstract class UniPathExtension { 
+	public $tree;
+	public $lv;
+	public $name;
+	public $filter;
+	public $data;
+	public $metadata;
+
+	function __invoke(&$tree, $lv = 0, $cursor_cmd = '', $tree_node1 = null, $tree_node_datatype = null, $tree_node_metadata = null) {
+if(/*$cursor_cmd != 'next' or */!empty($GLOBALS['unipath_debug']))
+var_dump($tree[$lv]['name']." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($tree_node1)&&isset($tree_node1['name'])?$tree_node1['name']:'')); 
+
+		if ($cursor_cmd == 'eval') {
+			$this->tree = $tree;
+			$this->lv = $lv;
+			$this->name = &$tree[$lv]['name'];
+			$this->metadata = &$tree[$lv]['metadata'];
+			
+			if (isset($tree[$lv]['filter']))
+				$this->filter =&  $tree[$lv]['filter'];
+			else 
+				unset($this->filter);
+			
+			if (isset($tree[$lv]['data']))
+				$this->data = &$tree[$lv]['data'];
+			else 
+				unset($this->data);
+			
+			return $this->evalute($tree_node1);
+		}
+		
+		if ($cursor_cmd == 'rewind') {
+			$this->metadata = &$tree[$lv]['metadata']
+			;
+			return $this->rewind();
+		}
+		
+		if ($cursor_cmd == 'next') {
+			$this->metadata = &$tree[$lv]['metadata'];
+			
+			return $this->next($tree_node1);
+		}
+		
+		if ($cursor_cmd == 'set') {
+			$this->metadata = &$tree[$lv]['metadata'];
+			
+			return $this->set($tree_node1, $tree_node_metadata);
+		}
+	}
+	
+	abstract function evalute($tree_node);
+
+	abstract function rewind();
+	
+	abstract function next($count);
+	
+	abstract function set($value, $metadata = null, $is_unset = false);
+}
+
 // главная функция (сердце UniPath)
 function __uni_evalUniPath($tree) {
-	global $GLOBALS_data_types, $GLOBALS_data_tracking, $GLOBALS_metadata, $GLOBALS_data_timestamp;
+	global $GLOBALS_metadata, $GLOBALS_data_timestamp;
 
 if(!empty($GLOBALS['unipath_debug'])) echo "\n**** ".$tree[count($tree)-1]['unipath']." ****\n";
 
@@ -571,7 +655,8 @@ if(!empty($GLOBALS['unipath_debug'])) {
 }
 
 		// *** cursor() ***
-		if($lv > 0 and isset($tree[$lv-1]['metadata'], $tree[$lv-1]['metadata']['cursor()'])) {
+		if($lv > 0 and isset($tree[$lv-1]['metadata']) and isset($tree[$lv-1]['metadata']['cursor()'])) {
+	
 			$call_result = call_user_func_array($tree[$lv-1]['metadata']['cursor()'], array(&$tree, $lv-1, 'eval', $tree[$lv]));
 
 			// если ответ пришёл нормальный, то переходем к следующему узлу
@@ -604,13 +689,16 @@ if(!empty($GLOBALS['unipath_debug'])) {
 			$tree[$lv]['metadata'] = array(gettype($tree[$lv]['data']), 'key()' => $name);
 		}
 		
-		// <PDO-object/odbc-link/mysql-link>/<table_name>[...]
-		elseif($lv > 0 and is_string($name) 
-			and in_array($prev_data_type, array('object/PDO', 'resource/odbc-link', 'resource/mysql-link')) 
+		// <PDO-object/odbc-link/mysql-link/mysqli-object>/<table_name>[...]
+		// TODO cache()
+		elseif($lv > 0 and is_string($name)
+			and in_array($prev_data_type, array('object/PDO', 'resource/odbc-link', 'resource/mysql-link', 'object/mysqli')) 
+			|| ($prev_data_type == 'object' && get_class($tree[$lv-1]['data']) == 'mysqli')
 			and strpos($name, 'last_error(') === false
 			and strpos($name, 'last_affected_rows(') === false
 			and strpos($name, 'last_insert_id(') === false
-			and strpos($name, 'sql_table_prefix(') === false) {
+			and strpos($name, 'sql_table_prefix(') === false
+			and !in_array($name, array('.', '..'))) {
 			
 				$db = $tree[$lv-1]['data'];
 				$metadata = array('tables' => array(), 'columns' => array());
@@ -618,40 +706,56 @@ if(!empty($GLOBALS['unipath_debug'])) {
 
 				// создадим сразу карту алиасов-таблиц
 				$aliases = array();
-				for($i = 0; $i < 10; $i++) {
-					$suffix = $i ? "_$i" : "";
-					if(isset($tree[$lv]["name$suffix"]) == false) break;
+				for($i = $lv; $i < count($tree); $i++) {
+					// TODO cache() detection
+				
+					$suffix_len = $i > $lv ? strspn($tree[$i]['name'], '+,', 0) : 0;
+					if($i > $lv and $suffix_len == 0) break;
 					
-					if(strlen($tree[$lv]["name$suffix"]) >= 6 and substr_compare($tree[$lv]["name$suffix"], 'alias(', 0, 6, true) === 0) {
-						list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]["name$suffix"]);
+					if(strlen($tree[$i]["name"]) >= (6+$suffix_len) and substr_compare($tree[$i]["name"], 'alias(', $suffix_len, 6, true) === 0) {
+						list($args, $args_types) = __uni_parseFuncArgs($tree[$i]["name"]);
 						if($args_types[0] != 'unipath')
 							$aliases[$args[1]] = $table_prefix.$args[0];
 						else {
-							$uni_result = __uni_with_start_data($tree[$lv]['data'], $tree[$lv]['metadata'][0], $tree[$lv]['metadata'], $args[0]);
+							$uni_result = __uni_with_start_data(
+								$tree[$lv]['data'], 
+								$tree[$lv]['metadata'][0], 
+								$tree[$lv]['metadata'], 
+								$args[0]);
 							if(is_array($uni_result['data']) == false)
 								$aliases[$args[1]] = $uni_result['data'];
 							else
 								trigger_error("UniPath.".__FUNCTION__.": array result in first argument for function alias() not supported! (".print_r($args[0], true).")", E_USER_ERROR);
 						}
 					} 
+					// table_name-as-alias_name
+					elseif (stripos($tree[$i]["name"], '-as-') !== false) {
+						$args = array(
+							substr($tree[$i]["name"], 0, stripos($tree[$i]["name"], '-as-')), 
+							substr($tree[$i]["name"], stripos($tree[$i]["name"], '-as-')+4));
+						$aliases[$args[1]] = $table_prefix.ltrim($args[0], '+,');
+					}
 					else
-						$aliases[$table_prefix.$tree[$lv]["name$suffix"]] = $table_prefix.$tree[$lv]["name$suffix"];
+						$aliases[$table_prefix.ltrim($tree[$i]["name"], '+,')] = $table_prefix.ltrim($tree[$i]["name"], '+,');
 				}
 				
 				// FROM ... LEFT JOIN ... WHERE ...
 				$sql_join = "";
 				$sql_where = "";
 				$sql_from_binds = array(); $sql_join_binds = array();
-				for($i = 0; $i < 10; $i++) {
-					$suffix = $i ? "_$i" : "";
-					$separator = isset($tree[$lv]["separator$suffix"]) ? $tree[$lv]["separator$suffix"] : '';
+				for($i = $lv; $i < count($tree); $i++) {
+					$suffix_len = $i > $lv ? strspn($tree[$i]['name'], '+,', 0) : 0;
+					if($i > $lv and $suffix_len == 0) break;
+					else $lv = $i; // передвигаем указатель текущего узла
 					
-					if(isset($tree[$lv]["name$suffix"]) == false) break;
 					
-					$filter = isset($tree[$lv]["filter$suffix"]) 
-						? $tree[$lv]["filter$suffix"]
+					$separator = substr($tree[$i]['name'], 0, $suffix_len);
+					
+					$filter = isset($tree[$i]["filter"]) 
+						? $tree[$i]["filter"]
 						: array();
 					$expr = isset($filter['start_expr']) ? $filter['start_expr'] : 'expr1';
+					$curr_braket_level = 0;
 
 					// SQL-expression
 					while($expr && isset($filter[$expr])) {
@@ -684,6 +788,9 @@ if(!empty($GLOBALS['unipath_debug'])) {
 							case 'function':
 								if(in_array(strpos(strtoupper($filter[$expr]['left']), 'LIKE('), array(0,1))) {
 									list($args, $args_types) = __uni_parseFuncArgs($filter[$expr]['left']);
+									
+									if (count($args) < 2) trigger_error(__FUNCTION__.': Not found 1 and/or 2 argument in '.$filter[$expr]['left']);
+									
 									$filter[$expr]['left_sql'] = $args[0].
 										(strtoupper($filter[$expr]['left'][0]) == 'I' ? " ILIKE " : " LIKE ").
 										($args_types[1] == 'string-with-N' ? 'N' : '').
@@ -762,8 +869,8 @@ if(!empty($GLOBALS['unipath_debug'])) {
 										break;
 									case 'resource/odbc-link':
 									default:
-										$filter[$expr]['right_sql'] = "('".implode(', ',
-											array_map(create_function('$a', 'retrun str_replace("\'","\'\'",$a);'),
+										$filter[$expr]['right_sql'] = "('".implode("','",
+											array_map(create_function('$a', 'return str_replace("\'","\'\'", trim($a));'),
 											$filter[$expr]['right']))."')";
 								}
 								switch($filter[$expr]['op']) {
@@ -849,57 +956,102 @@ if(!empty($GLOBALS['unipath_debug'])) {
 									$filter[$expr]['right_sql'] = '(' . implode(',', $filter[$expr]['right_sql']) . ')';
 									$filter[$expr]['op'] = 'IN';
 								} 
+								elseif(is_null($value)) {
+											$filter[$expr]['right_sql'] = 'NULL';
+											$filter[$expr]['op'] = $filter[$expr]['op'] == '=' ? 'IS' : 'IS NOT';
+										}
 								else
 									$filter[$expr]['right_sql'] = strval($value);
 								break;
+							default:
+								trigger_error("UniPath.".__FUNCTION__.": right part of expression is invalid in $name. \n".print_r($filter[$expr], true));
 						}
 						
 						// op
 						if(isset($filter[$expr]['sql']) == false) {
-							$open_braket = isset($filter[$expr]['open_braket']) ? '(' : '';
-							$close_braket = isset($filter[$expr]['close_braket']) ? ')' : '';
-							
-							if(!isset($filter[$expr]['left'])) 
-								$filter[$expr]['sql'] = '';
-							else if(isset($filter[$expr]['op'])) {
-								$filter[$expr]['sql'] = "{$filter[$expr]['left_sql']} {$filter[$expr]['op']} $open_braket{$filter[$expr]['right_sql']}$close_braket";
-								
-								if(!isset($filter[$expr]['right_sql'])) 
-									error_log('UniPath: right_sql is not set in filter! --  '.print_r($filter, true), E_USER_ERROR);
-							} else
-								$filter[$expr]['sql'] = $filter[$expr]['left_sql'];
-						}
 						
+							// ( - открывающая скобка
+							if($filter[$expr]['braket_level'] > $curr_braket_level) {
+								$filter[$expr]['sql'] = str_repeat('(', $filter[$expr]['braket_level'] - $curr_braket_level);
+								$curr_braket_level = $filter[$expr]['braket_level'];
+							}
+							else
+								$filter[$expr]['sql'] = '';
+							
+							if(!isset($filter[$expr]['left'])) {
+								// $filter[$expr]['sql'] = '';
+							}
+							elseif(isset($filter[$expr]['op']) and $filter[$expr]['op'] == 'left_eval') {
+								$filter[$expr]['sql'] .= $filter[$expr]['left_sql'];
+							}
+							elseif(isset($filter[$expr]['op'])) {
+								$filter[$expr]['sql'] .= "{$filter[$expr]['left_sql']} {$filter[$expr]['op']} ".(!isset($filter[$expr]['right_sql'])?'null':$filter[$expr]['right_sql']);
+								
+								if(!isset($filter[$expr]['right_sql'])) {
+									$unipath_tag = mb_substr($tree[$lv]['unipath'], mb_strlen($tree[$lv-1]['unipath'], "iso-8859-1"));
+									trigger_error(__FUNCTION__.": right_sql is not set in filter of `$unipath_tag`!\n".print_r($filter[$expr], true));
+								}
+							} 
+							else
+								$filter[$expr]['sql'] .= $filter[$expr]['left_sql'];
+								
+							// ) - закрывающая скобка
+							if($filter[$expr]['braket_level'] < $curr_braket_level) {
+								$filter[$expr]['sql'] .= str_repeat(')', $curr_braket_level - $filter[$expr]['braket_level']);
+								$curr_braket_level = $filter[$expr]['braket_level'];
+							}
+						}
+
 						// next
 						$last_expr = $expr;
 						$expr = empty($filter[$expr]['next']) ? false : $filter[$expr]['next'];
+						
+						// закроем скобки в конце выражения
+						if (!$expr and $filter[$last_expr]['braket_level'] > 0) {
+							$filter[$last_expr]['sql'] .= str_repeat(')', $filter[$last_expr]['braket_level']);
+						}
 					}
 					
 					// сохраним table => filter
-					$metadata['tables'][$tree[$lv]["name$suffix"]] = $filter;
+					if($suffix_len > 0)
+						$metadata['tables'][substr($tree[$i]["name"], $suffix_len)] = $filter;
+					else
+						$metadata['tables'][$tree[$i]["name"]] = $filter;
 
 					// alias()
-					if(strlen($tree[$lv]["name$suffix"]) >= 6 and substr_compare($tree[$lv]["name$suffix"], 'alias(', 0, 6, true) === 0) {
-						list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]["name$suffix"]);
-						$tbl_name = array_search($args[1], $aliases)." AS {$args[1]}";
+					if(strlen($tree[$i]["name"]) >= 6+$suffix_len and substr_compare($tree[$i]["name"], 'alias(', $suffix_len, 6, true) === 0) {
+						list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]["name"]);
+						$tbl_name = $aliases[$args[1]]." AS {$args[1]}"; 
 					} 
+					
+					// table_name-as-alias_name
+					elseif (stripos($tree[$i]["name"], '-as-') !== false) {
+						$args = array(0, substr($tree[$i]["name"], stripos($tree[$i]["name"], '-as-')+4));
+						$tbl_name = $aliases[$args[1]]." AS {$args[1]}"; 
+					}
 					
 					// table1
 					else {
-						$tbl_name = $table_prefix.$tree[$lv]["name$suffix"];
+						$tbl_name = $suffix_len > 0 
+							? $table_prefix.substr($tree[$i]["name"], $suffix_len) 
+							: $table_prefix.$tree[$i]["name"];
 					}
 
 					// FROM ... / JOIN ...
-					if(empty($suffix)) {
+					if($suffix_len == 0) {
 						$sql_join = $tbl_name; // FROM ...
 						$sql_where = (isset($last_expr) and !empty($filter[$last_expr]['sql'])) ? "WHERE ".$filter[$last_expr]['sql'] : "";
 					} else
 					if(empty($filter[$last_expr]['sql']))
 						$sql_join .= " NATURAL JOIN $tbl_name";
-					elseif($separator == '++')
+					elseif(strncmp($tree[$i]["name"], '++', 2) == 0)
 						$sql_join .= " LEFT OUTER JOIN $tbl_name ON ".$filter[$last_expr]['sql'];
-					else
+					elseif(strncmp($tree[$i]["name"], '+', 1) == 0)
 						$sql_join .= " LEFT JOIN $tbl_name ON ".$filter[$last_expr]['sql'];
+					else {
+						$sql_join .= " INNER JOIN $tbl_name ON ".$filter[$last_expr]['sql'];
+						trigger_error(__FUNCTION__.'(db): Unknown modifier - '.$tree[$i]["name"], E_USER_NOTICE);
+					}
 				}
 				
 				// SELECT ... GROUP BY ... ORDER BY ... LIMIT...
@@ -987,8 +1139,8 @@ if(!empty($GLOBALS['unipath_debug'])) {
 						list($args, $args_types) = __uni_parseFuncArgs($tree[$i]['name']);
 						$sql_select = "TOP {$args[0]} $sql_select";
 						$correct_lv++;
-					} else
-					if(strlen($tree[$i]['name']) >= 17 and substr_compare($tree[$i]['name'], 'sql_result_cache(', 0, 4, true) == 0) {
+					} 
+					elseif(strlen($tree[$i]['name']) >= 17 and substr_compare($tree[$i]['name'], 'sql_result_cache(', 0, 4, true) == 0) {
 						list($args, $args_types) = __uni_parseFuncArgs($tree[$i]['name']);
 						if($args_types[0] == 'unipath' and strspn($args[0], '0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_', 1)+1 == strlen($args[0])) {
 							$key = ltrim($args[0], '/$');
@@ -1004,7 +1156,8 @@ if(!empty($GLOBALS['unipath_debug'])) {
 							trigger_error('UniPath: only global variables enabled in sql_result_cache()!');
 						}
 						$correct_lv++;
-					} else
+					} 
+					else
 						break;
 				}
 				
@@ -1013,8 +1166,10 @@ if(!empty($GLOBALS['unipath_debug'])) {
 				$sql = rtrim("SELECT $sql_select FROM $sql_join $sql_where $sql_group_by $sql_order_by $sql_limit", ' ');
 				
 				// sql_iconv(...)
-				if(isset($iconv_from, $iconv_to))
+				if(isset($iconv_from, $iconv_to)) {
 					$sql = iconv($iconv_from, $iconv_to, $sql);
+					$sql_where = iconv($iconv_from, $iconv_to, $sql_where);
+				}
 
 // var_dump($sql, $sql_binds, isset($asSQLQuery));
 
@@ -1040,8 +1195,9 @@ if(!empty($GLOBALS['unipath_debug'])) {
 						"array/sql-query-with-params",
 						'cursor()' => '__cursor_database',
 						'db' => $db,
-						'db_type' => $prev_data_type,
+						'db_type' => $prev_data_type == 'object' ? 'object/'.get_class($db) : $prev_data_type,
 						'sql_query' => $sql,
+						'where' => $sql_where,
 						'columns' => array()
 						);
 				}
@@ -1174,7 +1330,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 				$tree[$lv]['data'] = realpath('.');
 				$tree[$lv]['metadata'] = array('string/local-directory', 'url' => 'file://'.$tree[$lv]['data'], 'key()' => $name);
 			} else {
-				$path = realpath('.') . '/' . $name;
+				$path = '/' . $name;
 				$tree[$lv]['data'] = $path;
 				$tree[$lv]['metadata'] = array('string/local-filesystem', 'url' => 'file://'.$path, 'key()' => $name);
 
@@ -1225,6 +1381,8 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 		// Class::<name>()
 		elseif(strpos($name, '(') != false and $prev_data_type == 'class') {
 			list($args, $args_types) = __uni_parseFuncArgs($name);
+			// TODO $args ...
+			
 			$class_name = $tree[$lv-1]['data'];
 			$func_name = substr($name, 0, strpos($name, '('));
 		
@@ -1234,6 +1392,17 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 				$func = create_function('$a', "return new $class_name($func_src);");
 				$tree[$lv]['data'] = call_user_func($func, $args);
 				$tree[$lv]['metadata'] = array(gettype($tree[$lv]['data']) . (is_object($tree[$lv]['data']) ? '/'.get_class($tree[$lv]['data']) : ''));
+			}
+			
+			elseif(is_string($class_name) and !empty($class_name)) {
+				$tree[$lv]['data'] = $class_name::$func_name();
+				$tree[$lv]['metadata'] = array(gettype($tree[$lv]['data']) . (is_object($tree[$lv]['data']) ? '/'.get_class($tree[$lv]['data']) : ''));
+			}
+			
+			else {
+				trigger_error(__FUNCTION__.'(Class::<name>()): '.$tree[$lv-1]["unipath"], E_USER_NOTICE);
+				$tree[$lv]['data'] = null;
+				$tree[$lv]['metadata'] = array('null');
 			}
 // var_dump($tree[$lv], $func_name, $tree[$lv-1]['data']);
 		}
@@ -1273,7 +1442,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 		}
 		
 		// object-><prop>
-		elseif(strpos($name, '(') === false and strpos($prev_data_type, 'object') === 0) {
+		elseif(strpos($name, '(') === false and $prev_data_type != 'object/DOMElement' and strpos($prev_data_type, 'object') === 0 and stripos('qwfpgjluyarstdhneizxcvbkm012345679_', $name[0]) !== false) {
 			if(property_exists($tree[$lv-1]['data'], $name)) {
 				$tree[$lv]['data'] = $tree[$lv-1]['data']->$name;
 				$tree[$lv]['metadata'] = array(gettype($tree[$lv]['data']) . (is_object($tree[$lv]['data']) ? '/'.get_class($tree[$lv]['data']) : ''), 'key()' => $name);
@@ -1286,13 +1455,94 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 			}
 		}
 		
+		// asHTML()
+		elseif(stripos($name, 'asHTML(') !== false) {
+			list($args, $args_types) = __uni_parseFuncArgs($name);
+			
+			if(!isset($args[0]) and !isset($args['encoding']))
+				$encoding = 'UTF-8';
+			elseif((isset($args_types['encoding']) ? $args_types['encoding'] : $args_types[0]) == 'unipath')
+				$encoding = __uni_with_start_data(
+					$tree[$lv-1]["data"], 
+					$tree[$lv-1]["metadata"][0], 
+					$tree[$lv-1]["metadata"], 
+					isset($args['encoding']) ? $args['encoding'] : $args[0]);
+			else
+				$encoding = isset($args['encoding']) ? $args['encoding'] : $args[0];
+				
+			$old_value = libxml_use_internal_errors(true);
+			libxml_clear_errors();
+			$doc = new DOMDocument('1.0');
+			if(in_array($encoding, array('utf8', 'utf-8', 'UTF8', 'UTF-8')))
+				$doc->loadHTML($tree[$lv-1]['data']);
+			else
+				$doc->loadHTML('<?xml version="1.0" encoding="'.$encoding.'" ?>'.$tree[$lv-1]['data']);
+				
+			foreach(libxml_get_errors() as $error) {
+				// xml-фрагмент без корневого узла?
+				if($error->message == "Extra content at the end of the document\n")
+					$doc->loadXML((in_array($encoding, array('utf8', 'utf-8', 'UTF8', 'UTF-8'))?'<root>':'<?xml version="1.0" encoding="'.$encoding.'" ?><root>').$tree[$lv-1]['data'].'</root>');
+				else
+					trigger_error("XMLError: ".trim($error->message).", code: {$error->level}, level: {$error->level}, file: ".(empty($error->file)?'[string]':$error->file).":{$error->line}:{$error->column}");
+			}
+			libxml_use_internal_errors($old_value);
+// 			var_dump(__FILE__.':'.__LINE__, $doc->documentElement);
+
+			$tree[$lv]['data'] = $doc->documentElement;
+			$tree[$lv]['metadata'] = array('object/DOMElement');
+		}
+		
+		// asXML()
+		elseif(stripos($name, 'asXML(') !== false) {
+			list($args, $args_types) = __uni_parseFuncArgs($name);
+
+			if(!isset($args[0]) and !isset($args['encoding']))
+				$encoding = 'UTF-8';
+			elseif((isset($args_types['encoding']) ? $args_types['encoding'] : $args_types[0]) == 'unipath')
+				$encoding = __uni_with_start_data(
+					$tree[$lv-1]["data"], 
+					$tree[$lv-1]["metadata"][0], 
+					$tree[$lv-1]["metadata"], 
+					isset($args['encoding']) ? $args['encoding'] : $args[0]);
+			else
+				$encoding = isset($args['encoding']) ? $args['encoding'] : $args[0];
+		
+			
+			$old_value = libxml_use_internal_errors(true);
+			libxml_clear_errors();
+			$doc = new DOMDocument('1.0');
+			if(in_array($encoding, array('utf8', 'utf-8', 'UTF8', 'UTF-8')))
+				$doc->loadXML($tree[$lv-1]['data']);
+			else
+				$doc->loadXML('<?xml version="1.0" encoding="'.$encoding.'" ?>'.$tree[$lv-1]['data']);
+				
+			foreach(libxml_get_errors() as $error) {
+				// xml-фрагмент без корневого узла?
+				if($error->message == "Extra content at the end of the document\n")
+					$doc->loadXML((in_array($encoding, array('utf8', 'utf-8', 'UTF8', 'UTF-8'))?'<root>':'<?xml version="1.0" encoding="'.$encoding.'" ?><root>').$tree[$lv-1]['data'].'</root>');
+				else
+					trigger_error("XMLError: ".trim($error->message).", code: {$error->level}, level: {$error->level}, file: ".(empty($error->file)?'[string]':$error->file).":{$error->line}:{$error->column}");
+			}
+			libxml_use_internal_errors($old_value);
+// 			var_dump(__FILE__.':'.__LINE__, $doc->documentElement);
+
+			$tree[$lv]['data'] = $doc->documentElement;
+			$tree[$lv]['metadata'] = array('object/DOMElement');
+		}
+		
 		// _uni_<name>()
 		elseif(strpos($name, '(') != false and sscanf($name, '%[^(]', $src_name)
 			and function_exists("_uni_{$src_name}")) {
 			$tree[$lv] = array_merge($tree[$lv], call_user_func_array("_uni_{$src_name}", array(&$tree, $lv)));
+			
+			// если попросили перескочить на другой шаг, перескочим
+			if(isset($tree[$lv]['metadata']['jump_to_lv'])) {
+				$lv = $tree[$lv]['metadata']['jump_to_lv'] - 1; // for(...$lv++)
+			}
 		}
 		
 		// php:*(), php-foreach:*(...), php_*()
+		// TODO cursor()
 		elseif(strpos($name, '(') > 5 and (strncmp($name, 'php_', 4) == 0 or strncmp($name, 'php:', 4) == 0 or strncmp($name, 'php-foreach:', 12) == 0)) {
 		
 			$func_name = substr($name, 4, strpos($name, '(')-4);
@@ -1395,7 +1645,6 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 		
 		// .[]/...%s...[] - повторная фильтрация данных с шаблоном ключя или без
 		elseif($name == '.' or strpos($name, '%') !== false /* or is_numeric($name) */) {
-			
 			$tree[$lv]['data'] = array();
 			$tree[$lv]['metadata'] = array($tree[$lv-1]['metadata'][0]);
 			$metadata = $tree[$lv-1]['metadata'];
@@ -1421,13 +1670,15 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 				
 				$tree[$lv]['data_tracking'] = & $tree[$lv-1]['data_tracking'];
 			}*/
+			
+			$to_filter = null;
 
 			if(strpos($name, '%') !== false)
 				$sscanf_format = $name;
 			
 			global $__uni_prt_cnt;
 			for($prt_cnt = 0; $prt_cnt < $__uni_prt_cnt; $prt_cnt++) {
-			
+				
 				// если предыдушие данные надо получать через cursor()
 				/* if(isset($data_tracking['cursor()'])) {
 			
@@ -1636,20 +1887,52 @@ if(!empty($GLOBALS['unipath_debug'])) { var_dump("key = $key, filter = ".($filte
 		}
 		
 		// * [array]
-		elseif($name == '*' and is_array($tree[$lv-1]['data'])) {
+		// TODO add filter
+		// TODO cursor()
+		elseif($name == '*' and (is_array($tree[$lv-1]['data']) || $prev_data_type == 'object/DOMElement')) {
 			$tree[$lv]['data'] = array();
 			$tree[$lv]['metadata'] = array('array');
+			
+			// node->childNodes -> array(children)
+			if ($prev_data_type == 'object/DOMElement') {
+				for($i = 0; $i < $tree[$lv-1]['data']->childNodes->length; $i++)
+					$tree[$lv]['data'][] = $tree[$lv-1]['data']->childNodes->item($i);
+			}
+			else
 			foreach($tree[$lv-1]['data'] as $key => $val) {
-			assert('is_array($val); /* '.print_r($val, true).' */');
-			foreach($val as $key2 => $val2)
-				if(!isset($tree[$lv]['data'][$key2]))
-					$tree[$lv]['data'][$key2] = array($key => $val2);
+				if ($val instanceof DOMElement) {
+					foreach(array('nodeName', 'tagName', 'nodeValue', 'localName', 'textContent', 'prefix') as $prop)
+						if(!isset($tree[$lv]['data'][$prop]))
+							$tree[$lv]['data'][$prop] = array($key => $val->$prop);
+						else
+							$tree[$lv]['data'][$prop][$key] = $val->$prop;
+						
+					// attributes
+					foreach($val->attributes as $attribute)
+					if(!isset($tree[$lv]['data']['@'.$attribute->name]))
+						$tree[$lv]['data']['@'.$attribute->name] = array($key => $attribute->value);
+					else
+						$tree[$lv]['data']['@'.$attribute->name][$key] = $attribute->value;
+						
+					// childNodes
+					for($i = 0; $i < $val->childNodes->length; $i++) {
+						$nodeName = $val->childNodes->item($i)->nodeName;
+						if(!isset($tree[$lv]['data'][$nodeName])) 
+							$tree[$lv]['data'][$nodeName] = array();
+						$tree[$lv]['data'][$nodeName][] = $val->childNodes->item($i);
+					}
+				}
 				else
-					$tree[$lv]['data'][$key2][$key] = $val2;
-			};
+				foreach($val as $key2 => $val2)
+					if(!isset($tree[$lv]['data'][$key2]))
+						$tree[$lv]['data'][$key2] = array($key => $val2);
+					else
+						$tree[$lv]['data'][$key2][$key] = $val2;
+			}
 		}
 		
 		// array/field, array/NNN
+		// DOMElement/field, DOMElement/NNN
 		elseif(in_array($name, array('', '.', '..', '*')) == false and strpos($name, '(') === false and strpos($name, ':') === false and strpos($name, '%') === false) {
 // 			and strncmp($prev_data_type, 'array', 5) == 0 and strpos($name, '(') === false):
 
@@ -1687,11 +1970,97 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 			} 
 			
 			// может object?
-			elseif(strpos($prev_data_type, 'object') === 0 and property_exists($tree[$lv-1]['data'], $name)) {
+			/* elseif(strpos($prev_data_type, 'object') === 0 and property_exists($tree[$lv-1]['data'], $name)) {
 // var_dump(property_exists($tree[$lv-1]['data'], $name), $name);
 				$tree[$lv]['data'] = $tree[$lv-1]['data']->{$name};
 				$tree[$lv]['metadata'] = array(gettype($tree[$lv]['data']) . (is_object($tree[$lv]['data']) ? '/'.get_class($tree[$lv]['data']) : ''));
-			} 
+			} */
+			
+			// object/DOMElement
+			elseif($prev_data_type == 'object/DOMElement') {
+				$tree[$lv]['data'] = array();
+				$tree[$lv]['metadata'] = array('array/DOMElement', 'key()' => $name);
+
+				// node/childNodes[$name]
+				if(is_numeric($name)) {
+					if($tree[$lv-1]['data']->childNodes->length > $name) {
+						$tree[$lv]['data'] = $tree[$lv-1]['data']->childNodes->item($name);
+						$tree[$lv]['metadata'][0] = 'object/DOMElement';
+					}
+					else {
+						$tree[$lv]['data'] = null;
+						$tree[$lv]['metadata'][0] = 'null';
+					}
+				}
+				else {
+					// @attribute
+					if($name[0] == '@') {
+						$tree[$lv]['data'] = $tree[$lv-1]['data']->getAttribute(substr($name, 1));
+						$tree[$lv]['metadata'][0] = gettype($tree[$lv]['data']);
+					}
+					// node->property
+					// TODO childNodes -> array?
+					elseif(property_exists($tree[$lv-1]['data'], $name)) {
+						$tree[$lv]['data'] = $tree[$lv-1]['data']->$name;
+						$tree[$lv]['metadata'] = array(gettype($tree[$lv]['data']) . (is_object($tree[$lv]['data']) ? '/'.get_class($tree[$lv]['data']) : ''), 'key()' => $name);
+					}
+					// node/child
+					else
+					for($i = 0; $i < $tree[$lv-1]['data']->childNodes->length; $i++) {
+						$node = $tree[$lv-1]['data']->childNodes->item($i);
+						if(stripos($node->nodeName, $name) === 0 and strlen($node->nodeName) == strlen($name))
+							$tree[$lv]['data'][] = $node;
+					}
+				}
+			}
+			
+			// array/DOMElement
+			elseif($prev_data_type == 'array/DOMElement') {
+				// nodes/N
+				if(is_numeric($name)) {
+					$tree[$lv]['data'] = array_key_exists($name, $tree[$lv-1]['data']) 
+					? $tree[$lv-1]['data'][$name] 
+					: null;
+					$tree[$lv]['metadata'] = array(
+						gettype($tree[$lv]['data']).(is_object($tree[$lv]['data']) ? '/'.get_class($tree[$lv]['data']) : ''), 
+						'key()' => $name);
+				}
+				else {
+					$first_node = reset($tree[$lv-1]['data']);
+					// (empty)
+					if(empty($first_node) or $first_node instanceof DOMElement == false) {
+						$tree[$lv]['data'] = $first_node;
+						$tree[$lv]['metadata'] = array(gettype($first_node), 'key()' => $name);
+					}
+					// nodes[0]->@attribute
+					elseif($name[0] == '@') {
+						$tree[$lv]['data'] = $first_node->getAttribute(substr($name, 1));
+						$tree[$lv]['metadata'] = array(
+							gettype($tree[$lv]['data']).(is_object($tree[$lv]['data']) ? '/'.get_class($tree[$lv]['data']) : ''), 
+							'key()' => $name);
+					}
+					// nodes[0]->property
+					// TODO childNodes -> array?
+					elseif(property_exists($first_node, $name)) {
+						$tree[$lv]['data'] = $first_node->$name;
+						$tree[$lv]['metadata'] = array(
+							gettype($tree[$lv]['data']).(is_object($tree[$lv]['data']) ? '/'.get_class($tree[$lv]['data']) : ''), 
+							'key()' => $name);
+					}
+					// nodes[*]/childNodes/$name
+					else {
+						foreach($tree[$lv-1]['data'] as $elem)
+						for($i = 0; $i < $elem->childNodes->length; $i++) {
+							$node = $elem->childNodes->item($i);
+							if(stripos($node->nodeName, $name) === 0 and strlen($node->nodeName) == strlen($name))
+								$tree[$lv]['data'][] = $node;
+						}
+						$tree[$lv]['metadata'] = array(
+							'array/DOMElement', 
+							'key()' => $name);
+					}
+				}
+			}
 			
 			// просто array()
 			elseif(is_array($tree[$lv-1]['data'])) {
@@ -1724,9 +2093,9 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 			//$tree[$lv]['metadata']['key()'] = $name;
 		
 			// filter1
-			if(!empty($filter) and $tree[$lv]['metadata'][0] == 'array') {
+			if(!empty($filter) and strpos($tree[$lv]['metadata'][0], 'array') === 0) {
 				$result = array();
-			
+				
 				// фильтруем каждый эллемент массива
 				for(reset($tree[$lv]['data']); list($key, $val) = each($tree[$lv]['data']);) {
 
@@ -1738,16 +2107,36 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 								if($filter['expr1']['left_type'] == 'dot'
 									and $tree[$lv]['data'][$key] == $filter['expr1']['right']) {
 										$filter_pass = true;
-								} elseif(is_array($tree[$lv]['data'][$key]) 
+								} 
+								elseif(is_array($tree[$lv]['data'][$key]) 
 									and array_key_exists($filter['expr1']['left'], $tree[$lv]['data'][$key])
 									and strval($tree[$lv]['data'][$key][$filter['expr1']['left']]) == $filter['expr1']['right']) {
 										$filter_pass = true;
-								} else
+								}
+								elseif($val instanceof DOMElement) {
+									if($filter['expr1']['left_type'] == 'name' and $filter['expr1']['left'][0] == '@') {
+										$left = $val->getAttribute(substr($filter['expr1']['left'], 1));
+										$filter_pass = $left == $filter['expr1']['right'];
+									}
+									else {
+										// TODO will be implemented...
+									}
+								}
+								else
 									$filter_pass = false;
 								break;
 							case '<>':
 							case '!=':
-								if(is_array($tree[$lv]['data'][$key]) 
+								if($val instanceof DOMElement) {
+									if($filter['expr1']['left_type'] == 'name' and $filter['expr1']['left'][0] == '@') {
+										$left = $val->getAttribute(substr($filter['expr1']['left'], 1));
+										$filter_pass = $left != $filter['expr1']['right'];
+									}
+									else {
+										// TODO will be implemented...
+									}
+								}
+								elseif(is_array($tree[$lv]['data'][$key]) 
 									and array_key_exists($filter['expr1']['left'], $tree[$lv]['data'][$key])
 									and strval($tree[$lv]['data'][$key][$filter['expr1']['left']]) != $filter['expr1']['right']) {
 										$filter_pass = true;
@@ -1764,8 +2153,26 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 				}
 				
 				$tree[$lv]['data'] = $result;
-			};
+			}
 			
+			// если список DOMElement отдаётся как результат, то вернём как строку для удобства
+			/*if($tree[$lv]['metadata'][0] == 'array/DOMElement' and count($tree) == $lv+1) {
+				switch(count($tree[$lv]['data'])) {
+					case 0:
+						$tree[$lv]['data'] = null; 
+						$tree[$lv]['metadata'][0] = 'null';
+						break;
+					case 1:
+						$tree[$lv]['data'] = $tree[$lv]['data'][0]->textContent; 
+						$tree[$lv]['metadata'][0] = 'string';
+						break;
+					default:
+						foreach($tree[$lv]['data'] as $i => $node)
+							$tree[$lv]['data'][$i] = $node->textContent;
+						$tree[$lv]['data'] = implode('', $tree[$lv]['data']);
+						$tree[$lv]['metadata'][0] = 'string';
+				}
+			}*/
 		}
 		
 		// [...] - пропустить или нет дальше
@@ -1777,6 +2184,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 			$expr = $tree[$lv]['filter']['start_expr'];
 			$filter = $tree[$lv]['filter'];
 			while($expr && isset($filter[$expr])) {
+
 				// left
 				switch($filter[$expr]['left_type']) {
 					case 'unipath':
@@ -1845,7 +2253,8 @@ if(!empty($GLOBALS['unipath_debug'])) $filter[$expr]['left_result'] = $left_resu
 						if(in_array($filter[$expr]['right'], array('null', 'NULL')))
 							$right_result = null;
 						else
-							$right_result = isset($row[$filter[$expr]['right']]) ? $row[$filter[$expr]['right']] : null;
+							$right_result = isset($data[$filter[$expr]['right']]) ? $data[$filter[$expr]['right']] : null;
+						break;
 					case 'list-of-string':
 						$right_result = $filter[$expr]['right'];
 						$filter[$expr]['op'] = 'in_right';
@@ -1863,7 +2272,6 @@ if(!empty($GLOBALS['unipath_debug'])) $filter[$expr]['right_result'] = $right_re
 				else
 				switch($filter[$expr]['op']) {
 					case '=':
-
 						// 0 == 'abc' or 'abc' == 0 -> true!!!
 						if(is_numeric($left_result) and is_numeric($right_result))
 							$filter[$expr]['result'] = $left_result == $right_result;
@@ -1949,6 +2357,8 @@ is_array($tree[$lv-1]['metadata']) or var_dump($tree);
 		
 		// если не понятно что делать, тогда просто копируем данные
 		else {
+			trigger_error("UniPath.".__FUNCTION__.": unknown - ".$name.' (skip)', E_USER_NOTICE);
+		
 			$tree[$lv]['data'] = $lv > 0 ? $tree[$lv-1]['data'] : array();
 			$tree[$lv]['metadata'] = $lv > 0 && isset($tree[$lv-1]['metadata']) 
 			? $tree[$lv-1]['metadata']
@@ -1990,12 +2400,20 @@ function __uni_parseUniPath($xpath = '', $start_data = null, $start_data_type = 
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('Parsing - '.$xpath);
 		// временно переключим mbstring.func_overload в 1-байтовую кодировку
 		if(ini_get('mbstring.func_overload') > 1) {
-			$mbstring_internal_encoding = ini_get('mbstring.internal_encoding');
-			ini_set('mbstring.internal_encoding', 'ISO-8859-1');
+			if (version_compare(PHP_VERSION, '5.6.0') < 0) {
+				$mbstring_internal_encoding = ini_get('mbstring.internal_encoding');
+				ini_set('mbstring.internal_encoding', 'ISO-8859-1');
+			}
+			else {
+// 				$mbstring_internal_encoding = ini_get('default_charset');
+// 				ini_set('default_charset', 'ISO-8859-1');
+				$mbstring_internal_encoding = mb_internal_encoding();
+				mb_internal_encoding("iso-8859-1");
+			}
 		}
 
 		$tree = array();
-		$suffix = '';
+// 		$suffix = '';
 		$p = 0;
 
 		// временно для удобства
@@ -2024,10 +2442,10 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('Parsing - '.$xpath);
 				case 'file':
 					$tree[] = array('name' => 'file://', /*'data' => 'file://', 'data_type' => 'string/local-filesystem', 'data_tracking' => array('key()' => 'file://'),*/ 'unipath' => 'file://'); 
 					break;
-				/*case 'http':
-					$url = strpos($xpath, "??/") > 0 ? substr($xpath, 0, strpos($xpath, "??/")) : $xpath;
-					$tree[] = array('name' => $url, 'unipath' => $url, 'data' => $url, 'data_type' => 'string/url', 'data_tracking' => array('key()' => $url));
-					break;*/
+				case 'http':
+					$url = strpos($xpath, "??") > 0 ? substr($xpath, 0, strpos($xpath, "??")) : $xpath;
+					$tree[] = array('name' => $url, 'data' => $url, 'metadata' => array('string/url', 'key()' => $url), 'unipath' => $url);
+					break;
 				default:
 					$tree[] = array('name' => "$scheme://", 'unipath' => "$scheme://"); 
 			}
@@ -2043,6 +2461,7 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('Parsing - '.$xpath);
 		global $__uni_prt_cnt; // защита от зацикливания
 		for($prt_cnt = $__uni_prt_cnt; $p < strlen($xpath) and $prt_cnt > 0; $prt_cnt--) {
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("0:$p => ".substr($xpath, 0, $p));
+
 			// новая ось
 			if($xpath[$p] == '/') {
 			
@@ -2051,7 +2470,7 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("0:$p => ".substr($xpath, 0
 					$tree[count($tree)-1]['unipath'] = substr($xpath, 0, $p);
 					
 				$tree[] = array( 'name' => null );
-				$suffix = '';
+// 				$suffix = '';
 				$p++;
 					
 				continue;
@@ -2059,17 +2478,14 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("0:$p => ".substr($xpath, 0
 			
 			// разделитель (+,,)
 			if($xpath[$p] == '+' or $xpath[$p] == ',') {
-				for($i = 1; $i < 10; $i++)
-					if(!isset($tree[count($tree)-1]["separator_$i"])) {
-						$suffix = "_$i";
-						break;
-					}
+	
+				// укажем путь предыдушего уровня пути
+				if(!empty($tree))
+					$tree[count($tree)-1]['unipath'] = substr($xpath, 0, $p);
 					
-				$separator = '';
-				while(isset($xpath[$p]) and $xpath[$p] == '+' or $xpath[$p] == ',')
-					$separator .= $xpath[$p++];
-
-				$tree[count($tree)-1]['separator'.$suffix] = $separator;
+				$separator_len = strspn($xpath, '+-,', $p);
+				$tree[] = array( 'name' => substr($xpath, $p, $separator_len));
+				$p += $separator_len;
 				
 				continue;
 			}
@@ -2151,7 +2567,7 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("braket_mode: xpath[p] = {$
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("braket_mode_result = ".substr($xpath, $start_p, $p - $start_p));
 				}
 				
-				$tree[count($tree)-1]['name'.$suffix] = substr($xpath, $start_p, $p - $start_p);
+				$tree[count($tree)-1]['name'] .= substr($xpath, $start_p, $p - $start_p);
 			
 				continue;
 			}
@@ -2162,21 +2578,51 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filtration start - $p");
 				$p++; // [
 
 				// разбираем фильтр
-				$filter = array('start_expr' => 'expr1', 'expr1' => array() );
+				$filter = array('start_expr' => 'expr1', 'expr1' => array('braket_level' => 0));
 				$next_expr_num = 2;
 				$expr = 'expr1';
 				$expr_key = 'left';
+				$curr_braket_level = 0;
 				while($p < strlen($xpath) and $xpath[$p] != ']') {
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("--- $expr --- ".(isset($filter[$expr]['op'])?$filter[$expr]['op']:''));
 					while(strpos(" \n\t", $xpath[$p]) !== false) $p++;
 //print_r(array(substr($xpath, 0, $p), $filter));
 					// до конца фильтрации были пробелы?
 					if($xpath[$p] == ']') continue;
-					
+if(!empty($GLOBALS['unipath_debug_parse'])) print_r($filter);
 					// (
 					if($xpath[$p] == '(') {
-if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_opened - $p");
-						$filter[$expr]['open_braket'] = true;
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_opened on $p");
+						$curr_braket_level += 1;
+
+						// создаём новый узел выражения и вклиниваем его в цепочку
+						$old_expr = $expr;
+						$expr = 'expr'.($next_expr_num++);
+						$filter[$expr] = array(
+							'left' => null,
+							'left_type' => null,
+							'op' => null,
+							'next' => $old_expr,
+							'braket_level' => $curr_braket_level
+						);
+						$filter[$old_expr]['right'] = $expr;
+						$filter[$old_expr]['right_type'] = "expr";
+						$expr_key = "left";
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("inserted_expr - $expr");
+
+						// корректируем порядок выполнения
+						foreach($filter as $_expr_key => $_expr)
+						if(is_array($_expr) and isset($_expr['next']) and $_expr["next"] == $old_expr and $_expr_key != $expr) {
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("  go-up-backpatch ({$_expr['next']}, {$_expr['op']})");
+							$filter[$_expr_key]["next"] = $expr;
+							break;
+						}
+						
+						// если мы вклиниваемся, то и начало цепочки корректируем
+						if($filter['start_expr'] == $old_expr)
+							$filter['start_expr'] = $expr;
+						
+// 						$filter[$expr]['braket_level'] = true;
 						$p++;
 						continue;
 					}
@@ -2184,7 +2630,13 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_opened - $p"
 					// )
 					if($xpath[$p] == ')') {
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_closed - $p");
-						$filter[$expr]['close_braket'] = true;
+						
+						// всплываем из групировки
+						$curr_braket_level -= 1;
+						
+						// корректируем next на случай если это последнее expr ?
+// 						var_dump($filter[$expr]);
+						
 						$p++;
 						continue;
 					}
@@ -2202,24 +2654,25 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_closed - $p"
 
 						// поднимемся наверх в поисках того, у кого мы сможе отобрать правую часть
 						$old_expr = $expr;
-						while(in_array($filter[$old_expr]['op'], array('*','div','mod','+','-')) and empty($filter[$old_expr]['open_braket']))
+						while(in_array($filter[$old_expr]['op'], array('*','div','mod','+','-','left_eval')) and $filter[$old_expr]['braket_level'] == 0)
 							if( empty($filter[$old_expr]['next']) ) break;
 							else $old_expr = $filter[$old_expr]['next'];
 
 						// прикрепляемся справа (продолжаем цепочку)
-						if(in_array($filter[$old_expr]['op'], array('*','div','mod','+','-')) 
-						    and empty($filter[$old_expr]['open_braket'])) {
+						if(in_array($filter[$old_expr]['op'], array('*','div','mod','+','-','left_eval')) 
+						&& $filter[$old_expr]['braket_level'] == 0) {
 							$expr = 'expr'.($next_expr_num++);
 							$filter[$expr] = array(
 								'left' => $old_expr,
 								'left_type' => 'expr',
 								'op' => $op,
-								'next' => isset($filter[$old_expr]['next']) ? $filter[$old_expr]['next'] : null
+								'next' => isset($filter[$old_expr]['next']) ? $filter[$old_expr]['next'] : null,
+								'braket_level' => $curr_braket_level
 							);
 							$filter[$old_expr]['next'] = $expr;
 						} 
 						
-						// отбираем правую часть
+						// или отбираем правую часть
 						else {
 							$expr = 'expr'.($next_expr_num++);
 
@@ -2236,7 +2689,8 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_closed - $p"
 								'left' => $filter[$old_expr]['right'],
 								'left_type' => $filter[$old_expr]['right_type'],
 								'op' => $op,
-								'next' => $old_expr // [мы] -> (старое) теущее звено
+								'next' => $old_expr, // [мы] -> (старое) теущее звено
+								'braket_level' => $curr_braket_level
 							);
 							
 							// right = [мы]
@@ -2266,20 +2720,19 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_closed - $p"
 						
 							// поднимемся наверх в поисках того, у кого мы сможе отобрать правую часть
 							$old_expr = $expr;
-							while(in_array($filter[$old_expr]['op'], array('*','/','div','mod'))
-								or isset($filter[$old_expr]['close_braket']))
+							while(in_array($filter[$old_expr]['op'], array('*','/','div','mod', 'left_eval')) and $filter[$old_expr]['braket_level'] == $curr_braket_level)
 								if( empty($filter[$old_expr]['next']) ) break;
 								else $old_expr = $filter[$old_expr]['next'];
 
 							// прикрепляемся справа (продолжаем цепочку)
-							if(in_array($filter[$old_expr]['op'], array('*','/','div','mod'))
-								or isset($filter[$old_expr]['close_braket'])) {
+							if(in_array($filter[$old_expr]['op'], array('*','/','div','mod', 'left_eval')) or $filter[$old_expr]['braket_level'] != $curr_braket_level) {
 								$expr = 'expr'.($next_expr_num++);
 								$filter[$expr] = array(
 									'left' => $old_expr,
 									'left_type' => 'expr',
 									'op' => $op,
-									'next' => isset($filter[$old_expr]['next']) ? $filter[$old_expr]['next'] : null
+									'next' => isset($filter[$old_expr]['next']) ? $filter[$old_expr]['next'] : null,
+									'braket_level' => $curr_braket_level
 								);
 								$filter[$old_expr]['next'] = $expr;
 							} 
@@ -2300,7 +2753,8 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_closed - $p"
 									'left' => $filter[$old_expr]['right'],
 									'left_type' => $filter[$old_expr]['right_type'],
 									'op' => $op,
-									'next' => $old_expr // [мы] -> (старое) теущее звено
+									'next' => $old_expr, // [мы] -> (старое) теущее звено
+									'braket_level' => $curr_braket_level
 								);
 								
 								// right = [мы]
@@ -2330,21 +2784,27 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('AND/OR detected! - '.$op);
 
 						// поднимемся наверх в поисках того, у кого мы сможе отобрать правую часть
 						$old_expr = $expr;
-						while(in_array($filter[$old_expr]['op'], array('*','div','mod', '+','-', '=','>','<','>=','<=', '<>', '!=', 'and', 'or')) 
-							and empty($filter[$old_expr]['open_braket']))
+						while((in_array($filter[$old_expr]['op'], array('*','div','mod', '+','-', '=','>','<','>=','<=', '<>', '!=', 'and', 'or', 'left_eval')) && $filter[$old_expr]["braket_level"] == $curr_braket_level) || ($filter[$old_expr]["braket_level"] > $curr_braket_level && isset($filter[$old_expr]["next"])))
 							if( empty($filter[$old_expr]['next']) ) break;
+							elseif ($filter[$filter[$old_expr]['next']]['braket_level'] < $curr_braket_level) break; // выходим за приделы групировки вниз
+							elseif ($filter[$filter[$old_expr]['next']]['braket_level'] > $curr_braket_level) $old_expr = $filter[$old_expr]['next']; // выходим за приделы групировки наверх
 							else $old_expr = $filter[$old_expr]['next'];
 
 						// прикрепляемся справа (продолжаем цепочку)
-						if(in_array($filter[$old_expr]['op'], array('*','div','mod', '+','-', '=','>','<','>=','<=', '<>', '!=', 'and', 'or'))
-							and empty($filter[$old_expr]['open_braket'])) {
+						if(in_array($filter[$old_expr]['op'], array('*','div','mod', '+','-', '=','>','<','>=','<=', '<>', '!=', 'and', 'or', 'left_eval')) && $filter[$old_expr]['braket_level'] == $curr_braket_level) {
 							$expr = 'expr'.($next_expr_num++);
 							$filter[$expr] = array(
 								'left' => $old_expr,
 								'left_type' => 'expr',
 								'op' => $op,
-								'next' => isset($filter[$old_expr]['next']) ? $filter[$old_expr]['next'] : null
+								'next' => isset($filter[$old_expr]['next']) ? $filter[$old_expr]['next'] : null,
+								'braket_level' => $curr_braket_level
 							);
+							
+							// при next выходящим за пределы групировки надо поправить right
+							if (isset($filter[$expr]['next']) && $filter[$filter[$expr]['next']]['braket_level'] != $curr_braket_level)
+								$filter[$filter[$expr]['next']]['right'] = $expr;
+							
 							$filter[$old_expr]['next'] = $expr;
 						} 
 						
@@ -2363,7 +2823,8 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('AND/OR detected! - '.$op);
 								'left' => $filter[$old_expr]['right'],
 								'left_type' => $filter[$old_expr]['right_type'],
 								'op' => $op,
-								'next' => $old_expr // [мы] -> (старое) теущее звено
+								'next' => $old_expr, // [мы] -> (старое) теущее звено
+								'braket_level' => $curr_braket_level
 							);
 							
 							// right = [мы]
@@ -2391,18 +2852,19 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('AND/OR detected! - '.$op);
 							
 							// поднимемся наверх в поисках того, у кого мы сможе отобрать правую часть
 							$old_expr = $expr;
-							while(in_array($filter[$old_expr]['op'], array('*','/','div','mod', '+','-', '=','<','>','<=','>=', '<>', '!=')) and empty($filter[$old_expr]['open_braket']))
+							while(in_array($filter[$old_expr]['op'], array('*','/','div','mod', '+','-', '=','<','>','<=','>=', '<>', '!=', 'left_eval')) || $filter[$old_expr]['braket_level'] != $curr_braket_level)
 								if( empty($filter[$old_expr]['next']) ) break;
 								else $old_expr = $filter[$old_expr]['next'];
 //var_dump("$expr: $old_expr");
 							// прикрепляемся справа (продолжаем цепочку)
-							if(in_array($filter[$old_expr]['op'], array('*','/','div','mod', '+','-', '=','<','>','<=','>=', '<>', '!=')) and empty($filter[$old_expr]['open_braket'])) {
+							if(in_array($filter[$old_expr]['op'], array('*','/','div','mod', '+','-', '=','<','>','<=','>=', '<>', '!=', 'left_eval')) || $filter[$old_expr]['braket_level'] != $curr_braket_level) {
 								$expr = 'expr'.($next_expr_num++);
 								$filter[$expr] = array(
 									'left' => $old_expr,
 									'left_type' => 'expr',
 									'op' => $op,
-									'next' => isset($filter[$old_expr]['next']) ? $filter[$old_expr]['next'] : null
+									'next' => isset($filter[$old_expr]['next']) ? $filter[$old_expr]['next'] : null,
+									'braket_level' => $curr_braket_level
 								);
 								$filter[$old_expr]['next'] = $expr;
 							} 
@@ -2430,7 +2892,8 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('AND/OR detected! - '.$op);
 									'left' => $filter[$old_expr]['right'],
 									'left_type' => $filter[$old_expr]['right_type'],
 									'op' => $op,
-									'next' => $old_expr // [мы] -> (старое) теущее звено
+									'next' => $old_expr, // [мы] -> (старое) теущее звено
+									'braket_level' => $curr_braket_level
 								);
 								
 								// right = [мы]
@@ -2443,30 +2906,6 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('AND/OR detected! - '.$op);
 							continue;
 						}
 					};
-				
-					// название поля
-					/*if(strpos('@qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_', $xpath[$p]) !== false) {
-					
-						// N'...' -> MS SQL UnicodeString
-						if($xpath[$p] == 'N' and isset($xpath[$p+1]) and $xpath[$p+1] == "'")
-							continue;
-					
-						$start_p = $p;
-						while(strpos('@qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM_0123456789-.', $xpath[$p]) !== false) 
-							$p++;
-						$filter[$expr][$expr_key] = substr($xpath, $start_p, $p - $start_p); 
-						$filter[$expr][$expr_key.'_type'] = 'name';
-						
-						// возможно это function или unipath
-						if(isset($xpath[$p]) and $xpath[$p] == '(') {
-							while($xpath[$p] != ')')
-								$filter[$expr][$expr_key] .= $xpath[$p++];
-							$filter[$expr][$expr_key] .= $xpath[$p++];
-							$filter[$expr][$expr_key.'_type'] = 'function';
-						}
-				
-						continue;
-					}*/
 
 					// число
 					if(strpos('0123456789', $xpath[$p]) !== false or ($xpath[$p] == '-' 
@@ -2661,6 +3100,7 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_detec
 							elseif($xpath[$p] == "\"" and $tmp_stack[$tmp_num] == 2) $tmp_num--;
 							elseif($xpath[$p] == "\"" and $tmp_stack[$tmp_num] > 10) $tmp_stack[++$tmp_num] = 2;
 							elseif($xpath[$p] == "/" and $tmp_stack[$tmp_num] == 99) $unipath_flag = 99;
+							elseif($xpath[$p] == '-' and $xpath[$p-1] == 'p' and $xpath[$p-2] == 'h' and $xpath[$p-3] == 'p') { /* кастыль для php-foreach */ }
 							elseif(strpos(" \n\t]=<>-+!", $xpath[$p]) !== false and $tmp_num == 0) break;
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_skip - {$xpath[$p]} ".str_repeat(" ",$tmp_num*3)." tmp_stack[{$tmp_num}] = {$tmp_stack[$tmp_num]}");
 							$p++;
@@ -2677,8 +3117,27 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_resul
 						
 						if($unipath_flag)
 							$filter[$expr][$expr_key.'_type'] = 'unipath';
-						elseif($func_flag)
+						elseif($func_flag) {
 							$filter[$expr][$expr_key.'_type'] = 'function';
+							if($expr_key == 'left') {
+								$filter[$expr]['op'] = 'left_eval';
+								$old_expr = $expr;
+								$expr = 'expr'.($next_expr_num++);
+								$filter[$expr] = array(
+									'left' => $old_expr,
+									'left_type' => 'expr',
+									'op' => null,
+									'next' => isset($filter[$old_expr]['next']) ? $filter[$old_expr]['next'] : null,
+									'braket_level' => $curr_braket_level
+								);
+								
+								// пофиксим right у предыдушего (?)
+								if (isset($filter[$old_expr]['next']))
+									$filter[$filter[$old_expr]['next']]['right'] = $expr;
+									
+								$filter[$old_expr]['next'] = $expr;
+							}
+						}
 						else
 							$filter[$expr][$expr_key.'_type'] = 'name';
 
@@ -2690,10 +3149,10 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_inner_unipath_resul
 				}
 				$p++; // ]
 				
-				if(isset($tree[count($tree)-1]['filter'.$suffix]))
-					$tree[count($tree)-1]['filter2'.$suffix] = $filter;
+				if(isset($tree[count($tree)-1]['filter']))
+					$tree[count($tree)-1]['filter2'] = $filter;
 				else
-					$tree[count($tree)-1]['filter'.$suffix] = $filter;
+					$tree[count($tree)-1]['filter'] = $filter;
 					
 				continue;
 			} // фильтрация
@@ -2734,7 +3193,7 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('$string_border = '.$string
 				if($end === false) 
 					trigger_error("UniPath.__uni_parseUniPath(): Not found end of string started on $p! (".substr($xpath, $p-strlen($string_border)).')', E_USER_ERROR);
 
-				$tree[count($tree)-1]['name'.$suffix] = substr($xpath, $p, $end-$p);
+				$tree[count($tree)-1]['name'] .= substr($xpath, $p, $end-$p);
 				
 				// передвинем указатель
 				$p = $end + strlen($string_border);
@@ -2752,7 +3211,11 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump(substr($xpath, $p));
 
 		// вернём обратно кодировку mbstring если включена
 		if(ini_get('mbstring.func_overload') > 1) {
-			ini_set('mbstring.internal_encoding', $mbstring_internal_encoding);
+			if (version_compare(PHP_VERSION, '5.6.0') < 0)
+				ini_set('mbstring.internal_encoding', $mbstring_internal_encoding);
+			else
+// 				ini_set('default_charset', $mbstring_internal_encoding);
+				mb_internal_encoding($mbstring_internal_encoding);
 		}
 			
 		return $tree;
@@ -2763,8 +3226,16 @@ function __uni_parseFuncArgs($string) {
 	
 	// временно переключим mbstring.func_overload в 1-байтовую кодировку
 	if(ini_get('mbstring.func_overload') > 1) {
-		$mbstring_internal_encoding = ini_get('mbstring.internal_encoding');
-		ini_set('mbstring.internal_encoding', 'ISO-8859-1');
+		if (version_compare(PHP_VERSION, '5.6.0') < 0) {
+			$mbstring_internal_encoding = ini_get('mbstring.internal_encoding');
+			ini_set('mbstring.internal_encoding', 'ISO-8859-1');
+		}
+		else {
+// 			$mbstring_internal_encoding = ini_get('default_charset');
+// 			ini_set('default_charset', 'ISO-8859-1');
+			$mbstring_internal_encoding = mb_internal_encoding();
+			mb_internal_encoding("iso-8859-1");
+		}
 	}
 	
 	$result = array(); $result_types = array();
@@ -3004,7 +3475,11 @@ if(!empty($GLOBALS['unipath_debug'])) echo(" <-- $mode \n |".substr($string, $p,
 	
 	// вернём обратно кодировку mbstring если включена
 	if(ini_get('mbstring.func_overload') > 1) {
-		ini_set('mbstring.internal_encoding', $mbstring_internal_encoding);
+		if (version_compare(PHP_VERSION, '5.6.0') < 0)
+			ini_set('mbstring.internal_encoding', $mbstring_internal_encoding);
+		else
+// 			ini_set('default_charset', $mbstring_internal_encoding);
+			mb_internal_encoding($mbstring_internal_encoding);
 	}
 	
 	return array($result, $result_types);
@@ -3238,7 +3713,7 @@ if(!empty($GLOBALS['unipath_debug'])) { var_dump("key = $key, filter = ".($filte
 
 function __cursor_database(&$tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null, $cursor_arg1_metadata = null) {
 if(/*$cursor_cmd != 'next' or*/ !empty($GLOBALS['unipath_debug']))
-var_dump((isset($tree[$lv]['name'])?$tree[$lv]['name']:'?')." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($cursor_arg1)&&isset($cursor_arg1['name'])?$cursor_arg1['name']:strval($cursor_arg1)));
+var_dump((isset($tree[$lv]['name'])?$tree[$lv]['name']:'?')." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($cursor_arg1)&&array_key_exists('name', $cursor_arg1)?$cursor_arg1['name']:print_r($cursor_arg1, true)));
 
 	global $__uni_assign_mode;
 
@@ -3269,6 +3744,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("start \$metadata = ", $tree[$lv]
 
 		$db = $metadata['db'];
 		$sql_query = $metadata['sql_query'];
+		$sql_binds = empty($metadata['sql_binds']) ? array() : $metadata['sql_binds'];
 		
 		if(isset($GLOBALS['unipath_debug_sql'])) {
 			if(is_array($GLOBALS['unipath_debug_sql']))
@@ -3288,7 +3764,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('First rewind');
 // 				if($GLOBALS['unipath_debug_sql'] == 'simulate')
 // 					$res_execute_result = false;
 // } else {
-				if($res) $res_execute_result = $res->execute(array());
+				if($res) $res_execute_result = $res->execute($sql_binds);
 // }
 					
 				// сообщим об ошибке в запросе
@@ -3313,7 +3789,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('First rewind');
 			case 'resource/mysql-link':
 				$res = mysql_query($sql_query, $db);
 				if(empty($res)) {
-					trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): MySQL Query: mysql_errno=".mysql_errno($db).", mysql_error=".mysql_error($db))." ($sql_query)";
+					trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): MySQL Query: mysql_errno=".mysql_errno($db).", mysql_error=".mysql_error($db)." ($sql_query)", E_USER_NOTICE);
 					$cache_item['last_error()'] = array(mysql_errno($db), mysql_error($db));
 				} else {
 					$metadata['stmt'] = $res;
@@ -3326,7 +3802,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('First rewind');
 			case 'resource/odbc-link':
 				$res = odbc_prepare($db, $sql_query);
 				if(empty($res)) {
-					trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): ODBC Prepare: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db))." ($sql_query)";
+					trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): ODBC Prepare: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db)." ($sql_query)", E_USER_NOTICE);
 					$cache_item['last_error()'] = array(odbc_error($db), odbc_errormsg($db));
 				} else {
 // if(!empty($GLOBALS['unipath_debug_sql'])) {
@@ -3339,7 +3815,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('First rewind');
 					}
 // }
 					if($res and !$res_execute_result) {
-						trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): ODBC Execute: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db))." ($sql_query)";
+						trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): ODBC Execute: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db)." ($sql_query)", E_USER_NOTICE);
 						$cache_item['last_error()'] = array(odbc_error($db), odbc_errormsg($db));
 					} else {
 						$metadata['stmt'] = $res;
@@ -3350,6 +3826,20 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('First rewind');
 					}
 				} 
 				break;
+				
+			case 'object/mysqli':
+				$res = $db->query($sql_query);
+				if(empty($res)) {
+					trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): MySQLi Prepare: error={$db->errno}, errormsg={$db->error} ($sql_query)", E_USER_NOTICE);
+					$cache_item['last_error()'] = array($db->errno, $db->error);
+				} else {
+					$metadata['stmt'] = $res;
+					$metadata['current_pos'] = 0;
+					$cache_item['last_affected_rows()'] = $res->num_rows;
+				}
+			
+				break;
+				
 			default:
 				trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): Don`t know how-to work with '".gettype($db)."' of type '".(is_resource($db)?get_resource_type($db):(is_object($db)?get_class($db):'unknown'))."'");
 			}
@@ -3445,7 +3935,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("UniPath.".__FUNCTION__."($cursor
 					
 			for($i = 1; $i <= (is_null($cursor_arg1) ? 1 : intval($cursor_arg1)); $i++) {
 			
-				// все строки выбраны и запрос уничтожен - прекращаем выберать строки
+				// все строки выбраны и запрос уничтожен - прекращаем выбирать строки
 				if($metadata['stmt'] === false or is_null($metadata['stmt'])) 
 					break;
 
@@ -3477,12 +3967,20 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('UniPath.'.__FUNCTION__.': result
 							$metadata['stmt'] = null;
 						}
 						break;
+					case 'object/mysqli':
+						$row = $metadata['stmt']->fetch_assoc();
+						// закончились строки, закрываем и освобождаем
+						if(is_null($row)) {
+							$metadata['stmt']->free();
+							$metadata['stmt'] = null;
+						}
+						break;
 					default:
 						trigger_error("UniPath: ".__FUNCTION__.": Result resource has unknown type! ".gettype($res));
 				}
 				
 				// если есть строка, добавляем к себе
-				if($row != false) {
+				if($row != false and $row != null) {
 				
 					$result['data'][$i-1] = $row;
 					
@@ -3652,8 +4150,12 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump((isset($tree[$lv]['name'])?$tree[
 
 			return $result;
 		}
+		
+		// мы не можем это выполнить -> пусть стандартный алгоритм отработает
+		else
+			return false;
 	}
-	
+
 	trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): Unknown cursor command '{$cursor_arg1['name']}'!", E_USER_NOTICE);
 	$result = array(
 		'data' => null, 
@@ -3684,11 +4186,12 @@ function __cursor_database_describe_tables($tables, $db, &$cache_item) {
 	// Список специфичных запросов по определению структуры таблиц для каждой СУБД
 	$known_describe_table_sql = array(
 		'mysql' => 'SHOW COLUMNS FROM ?', // 'DESCRIBE ?',
-		'pgsql' => "SELECT attrelid::regclass, attnum, attname FROM pg_attribute WHERE attrelid = '?'::regclass AND attnum > 0 AND NOT attisdropped ORDER  BY attnum",
+		'mysqli' => 'SHOW COLUMNS FROM ?', // 'DESCRIBE ?',
+		'pgsql' => "SELECT attrelid::regclass, attnum, attname, typname, atttypmod, attnotnull, adsrc, indisprimary, indisunique FROM pg_attribute LEFT OUTER JOIN pg_type ON pg_type.oid = atttypid LEFT OUTER JOIN pg_attrdef ON adrelid = attrelid AND adnum = attnum LEFT OUTER JOIN pg_index ON indrelid = attrelid AND attnum = ANY(indkey) WHERE attrelid = '?'::regclass AND attnum > 0 AND NOT attisdropped ORDER  BY attnum",
 		'sqlite3' => "PRAGMA table_info(?)", // 'SELECT * FROM SQLITE_MASTER WHERE tbl_nam = ?'
 		'db2' => "SELECT * FROM SYSIBM.COLUMNS WHERE TABLE_NAME = '?' ORDER BY COLNO",
-		'mssql' => "SELECT * FROM information_schema.columns WHERE table_name = '?' ORDER BY ordinal_position",
-		'oracle' => "SELECT * FROM user_tab_columns WHERE table_name = '?' ORDER column_id" // need strtoupper(table_name)!!!
+		'oracle' => "SELECT * FROM user_tab_columns WHERE table_name = '?' ORDER column_id", // need strtoupper(table_name)!!!
+		'mssql' => "SELECT * FROM information_schema.columns WHERE table_name = '?' ORDER BY ordinal_position" // SQL-92
 	);
 	
 	foreach($known_describe_table_sql as $dbms => $sql) {
@@ -3708,7 +4211,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(implode(';',$db->errorInfo()).' =
 				// подошло
 				else {
 					$cache_item['dbms'] = $dbms;
-					
+
 					$rows = array();
 					while($row = $res->fetch(PDO::FETCH_NUM)) {
 						switch($dbms) {
@@ -3717,6 +4220,9 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(implode(';',$db->errorInfo()).' =
 								break;
 							case 'mysql':
 								$rows[$row[0]] = array('type' => $row[1], 'null' => (bool) $row[2], 'default' => $row[4], 'pkey' => $row[3] == 'PRI', 'extra' => $row[5]);
+								break;
+							case 'pgsql':
+								$rows[$row[2]] = array('type' => $row[3].($row[4] > 0 ? "({$row[4]})" : ''), 'null' => $row[5] == 1, 'default' => $row[6], 'pkey' => $row[7] == 1);
 								break;
 							default:
 								trigger_error('UniPath.'.__FUNCTION__.": Describe table for $dbms over PDO not implemented yet!", E_USER_ERROR);
@@ -3812,6 +4318,26 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(implode(';',$db->errorInfo()).' =
 					}
 				}
 				break 2;
+			case 'object/mysqli':
+				if($dbms != 'mysqli') continue;
+				
+				foreach($need_describe_table as $table) {
+					$res = $db->query(str_replace('?', $table, $sql));
+					
+					if(!empty($res)) {
+						for($rows = array(); $row = $res->fetch_array();) {
+							$rows[$row[0]] = array('type' => $row[1], 'null' => (bool) $row[2], 'default' => $row[4], 'pkey' => $row[3] == 'PRI', 'extra' => $row[5]);
+							$rows["$table.$row[0]"] =& $rows[$row[0]];
+						}
+						$result[$table] = $cache_item['table_structure'][$table] = $rows;
+						$res->free();
+					} 
+						
+					else {
+						trigger_error("UniPath: ".__FUNCTION__.": MySQLi Query: errno={$db->errno}, error={$db->error} (".str_replace('?', $table, $sql).")");
+					}
+				}
+				break 2;
 			default:
 				trigger_error("UniPath: ".__FUNCTION__.": Don`t know how-to work with $db_type");
 		}
@@ -3836,7 +4362,7 @@ function __cursor_database_set($tree, $lv, $set_value, $cursor_arg1_metadata = n
 	$db_type = is_resource($db) 
 			? 'resource/'.str_replace(' ', '-', get_resource_type($db))
 			: (is_object($db) ? 'object/'.get_class($db) : gettype($db));
-	
+
 	// промежуточные результаты хранятся в кеше
 	isset($GLOBALS['__cursor_database']) or $GLOBALS['__cursor_database'] = array();
 	foreach($GLOBALS['__cursor_database'] as $num => $item) 
@@ -3949,17 +4475,30 @@ function __cursor_database_set($tree, $lv, $set_value, $cursor_arg1_metadata = n
 			}
 		}
 	}
-		
+
 if(!empty($GLOBALS['unipath_debug'])) var_dump($sql_upd_set);
 	
 	// теперь добавим WHERE
 	$sql_upd_where = array(); $sql_upd_where_pkey_used = array();
 	foreach($sql_upd_set as $table => $values) {
 		$table_prefix = $table.'.'; $table_prefix_len = strlen($table)+1;
+// var_dump($metadata['tables'][$table]);
 		foreach($metadata['tables'][$table] as $expr_id => $expr) if(is_array($expr)) {
 // var_dump($expr);
+
+			// если работаем только с одной таблицой, то можно все условия использовать
+// var_dump(__FILE__.':'.__LINE__, $data_type);
+			if(count($metadata['tables']) == 1 and strpos($data_type, '/db-row-value') === false) {
+				$sql_upd_where[$table][] = $expr['sql'];
+				continue;
+			}
+			
 			// пока что только col_name =... обрабатываем
-			if($expr['op'] != '=' and $expr['left_type'] = 'name') continue;
+			if(empty($expr['op']) or in_array($expr['op'], array('=', '!=', '<>', '<', '>', '>=', '<=')) == false and $expr['left_type'] = 'name') {
+				trigger_error(__FUNCTION__.": can't use condition -> ".print_r($expr, true), E_USER_WARNING);
+				$sql_upd_where[$table][] = "'this_update_is_blocked'='because_a_bad_condition_was_detected'"; // забракуем этот update
+				continue;
+			}
 			
 			if(substr_compare($expr['left'], $table_prefix, 0, $table_prefix_len, true) == 0
 			|| isset($tables_descr[$table], $tables_descr[$table][$expr['left']])) {
@@ -4054,7 +4593,6 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump($sql_upd_set);
 			}
 	}
 		
-		
 	// выполним запросы
 	foreach($sql_upd_set as $table => $new_values) {
 	
@@ -4139,6 +4677,15 @@ if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === '
 				}
 if(!empty($GLOBALS['unipath_debug_sql']) and !is_array($GLOBALS['unipath_debug_sql'])) var_dump("\$db = ".print_r($db, true).", mysql_query() = ".$stmt.", mysql_affected_rows() = ".mysql_affected_rows($db).", mysql_errno() = ".mysql_errno($db).", mysql_error() = ".mysql_error($db));
 				break;
+			case 'object/mysqli':
+				$stmt = $db->query($sql_upd);
+				if(empty($stmt)) {
+					trigger_error("UniPath: ".__FUNCTION__.": MySQLi Query: errno={$db->errno}, error={$db->error} ($sql_upd)");
+					$cache_item['last_error()'] = $cache_item["last_error($table)"] = array($db->errno, $db->error);
+				} else {
+					$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = $db->affected_rows;
+				}
+				break;
 			default:
 				trigger_error("UniPath.".__FUNCTION__.": Don`t know how-to work with $db_type");
 		}
@@ -4207,6 +4754,11 @@ function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 		);
 	
 	if($cursor_cmd == 'set') {
+		if(is_array($cursor_arg1) == false) {
+			trigger_error('UniPath.'.__FUNCTION__.': $cursor_arg1 is not an array! ('.$tree[$lv]['unipath'].')');
+			return false;
+		}
+	
 		$metadata = $tree[$lv]['metadata'];
 		$db = $metadata['db'];
 		$db_type = is_resource($db) 
@@ -4251,8 +4803,9 @@ function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 						$sql_vals[] = "'".str_replace("'", "''", strval($val))."'";
 				}
 			}
-			elseif(is_array($val))
-var_dump('!!! bad $val = ', print_r($val, true));
+			elseif(is_array($val)) {
+				trigger_error(__FUNCTION__.": Bad value for $key - ".print_r($val, true));
+			}
 			elseif(is_bool($val))
 				$sql_vals[] = $val ? 1 : "''";
 			else
@@ -4280,15 +4833,43 @@ var_dump('!!! bad $val = ', print_r($val, true));
 			}
 		}
 		
+		elseif ($db_type == 'object/mysqli') {
+			$stmt = $db->prepare($sql);
+			
+			// режим симуляции выполнения INSERT
+			if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate')
+				$db_execute_result = false;
+			elseif($stmt) 
+				$db_execute_result = $stmt->execute();
+			
+			if($stmt and !empty($db_execute_result)) {
+				$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = $stmt->affected_rows;
+				$cache_item['last_insert_id()'] = $cache_item["last_insert_id($table)"] = $stmt->insert_id;
+			} 
+			else {
+				if($db->sqlstate == '00000' and isset($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate') {
+					/* skip ??? */
+					trigger_error("UniPath.".__FUNCTION__.": MySQLi: unipath_debug_sql = simulate! ($sql)", E_USER_NOTICE);
+					var_dump($GLOBALS['unipath_debug_sql']);
+				}
+				elseif($db->sqlstate == '00000' and empty($db_execute_result))
+					trigger_error("UniPath.".__FUNCTION__.": MySQLi: execute() return false! ($sql)", E_USER_NOTICE);
+				else
+					trigger_error("UniPath.".__FUNCTION__.": MySQLi: {$db->sqlstate};{$db->error};{$db->errno} ($sql)", E_USER_NOTICE);
+			
+				$cache_item['last_error()'] = $cache_item["last_error($table)"] = array($db->sqlstate, $db->error, $db->errno);
+			}
+		}
+		
 		// PDO
 		else {
 			$stmt = $db->prepare($sql);
 	
-if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate') {
-		$db_execute_result = false;
-} else {
-			if($stmt) $db_execute_result = $stmt->execute();
-}
+			// режим симуляции выполнения INSERT
+			if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate')
+				$db_execute_result = false;
+			elseif($stmt) 
+				$db_execute_result = $stmt->execute();
 
 if(!empty($GLOBALS['unipath_debug_sql'])) var_dump("\$stmt = ".print_r($stmt, true).", \$db_execute_result = ".(isset($db_execute_result)?$db_execute_result:'undefined').", rowCount = ".(is_object($stmt)?$stmt->rowCount():$stmt));
 	
@@ -4338,9 +4919,14 @@ function _uni_delete($tree, $lv = 0) {
 		$cache_item =& $GLOBALS['__cursor_database'][count($GLOBALS['__cursor_database']) - 1];
 	}
 
-	$table = current($metadata['tables']);
+	// может быть просто список таблиц, а может быть [table_name=>$filter, ...]
+	foreach($metadata['tables'] as $key => $val) {
+		$table = is_numeric($key) ? $val : $key;
+	}
+	
 	$table_prefix = "$table.";
-	$sql = "";
+	$sql_where = "WHERE ";
+	if (is_array($metadata['where']))
 	foreach($metadata['where'] as $col_name => $val) {
 	
 		// если поле относится к нашей таблице, то добавляем к нашему WHERE
@@ -4348,12 +4934,17 @@ function _uni_delete($tree, $lv = 0) {
 		
 			/* ! правая часть уже экранирована ! */
 			if($col_name[0] == '-')
-				$sql .= empty($sql) ? $val : " AND $val";
+				$sql_where .= $sql_where == "WHERE " ? $val : " AND $val";
 			else
-				$sql .= empty($sql) ? "$col_name $val" : " AND $col_name $val";
+				$sql_where .= $sql_where == "WHERE " ? "$col_name $val" : " AND $col_name $val";
 		}
 	}
-	$sql = "DELETE FROM $table WHERE $sql";
+	else
+		$sql_where = stripos($metadata['where'], 'WHERE ') === 0 
+			? $metadata['where'] 
+			: $sql_where.$metadata['where'];
+	
+	$sql = "DELETE FROM $table $sql_where";
 	
 	$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = null;
 	$cache_item['last_error()'] = $cache_item["last_error($table)"] = null;
@@ -4412,12 +5003,37 @@ if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === '
 			}
 			break;
 		case 'resource/mysql-link':
+			if(isset($GLOBALS['unipath_debug_sql'])) {
+				if(is_array($GLOBALS['unipath_debug_sql']))
+					$GLOBALS['unipath_debug_sql'][] = $sql;
+				else
+// 					trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
+					echo "\nUniPath.".__FUNCTION__.': '.$sql; // error_reporting(0);
+			}
+		
 			$stmt = mysql_query($sql, $db);
 			if(empty($stmt)) {
 				trigger_error("UniPath.".__FUNCTION__.": MySQL Query: mysql_errno=".mysql_errno($db).", mysql_error=".mysql_error($db)." ($sql)");
 				$cache_item['last_error()'] = array(mysql_errno($db), mysql_error($db));
 			} else {
 				$cache_item['last_affected_rows()'] = mysql_affected_rows($db);
+			}
+			break;
+		case 'object/mysqli':
+			if(isset($GLOBALS['unipath_debug_sql'])) {
+				if(is_array($GLOBALS['unipath_debug_sql']))
+					$GLOBALS['unipath_debug_sql'][] = $sql;
+				else
+// 					trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
+					echo "\nUniPath.".__FUNCTION__.': '.$sql; // error_reporting(0);
+			}
+			
+			$stmt = mysqli_query($db, $sql);
+			if(empty($stmt)) {
+				trigger_error("UniPath.".__FUNCTION__.": MySQLi Query: mysqli_errno=".mysqli_errno($db).", mysqli_error=".mysqli_error($db)." ($sql)");
+				$cache_item['last_error()'] = array(mysqli_errno($db), mysqli_error($db));
+			} else {
+				$cache_item['last_affected_rows()'] = mysqli_affected_rows($db);
 			}
 			break;
 		default:
@@ -4473,7 +5089,6 @@ function _uni_cache($tree, $lv = 0) {
 	$arg1 = $args[0];
 	$arg1_type = $args_types[0];
 	if($arg1_type == 'string') $arg1 = '/'.$arg1; // временно, для совместимости со старым кодом
-	
 	$lifetime = isset($args['lifetime']) ? $args['lifetime'] : 2147483647;
 
 // var_dump("cache key = ".$arg1);
@@ -4532,10 +5147,9 @@ function _uni_cache($tree, $lv = 0) {
 	// save
 	if($lv > 0 and $tree[$lv-1]['name'] != '?start_data?') {
 // var_dump("save to cache - uni({$arg1}, ...)");
-		unset($tree[$lv-1]['metadata']);
 		__uni_with_start_data(
 			$tree[$lv-1]['data'], 
-			$tree[$lv-1]['metadata'][0], 
+			null, 
 			$tree[$lv-1]['metadata'], 
 			$arg1, 
 			json_encode($tree[$lv-1]+array('cache_timestamp' => time())));
@@ -4602,7 +5216,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("if start_data --- ", $tree[$lv-1
 		$arg1 = (bool) $arg1['data'];
 	} else
 		$arg1 = (bool) $args[0];
-if(!empty($GLOBALS['unipath_debug'])) var_dump("--- if($arg1):", $args, $args_types, '---');
+if(!empty($GLOBALS['unipath_debug'])) var_dump("--- if(".var_export($arg1,true)."):", $args, $args_types, '---');
 	// TRUE
 	if($arg1 and $args_types[1] == 'unipath')
 		$result = __uni_with_start_data(
@@ -4676,9 +5290,7 @@ function _uni_ifNull($tree, $lv = 0) {
 	return $result;
 }
 
-function _uni_unset($tree, $lv = 0) { return _uni_unlet($tree, $lv); }
-function _uni_unlet($tree, $lv = 0) {
-
+function _uni_unset($tree, $lv = 0) {
 	$result = array('data' => $tree[$lv-1]['data'], 'metadata' => $tree[$lv-1]['metadata']);
 
 	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
@@ -4694,14 +5306,13 @@ function _uni_unlet($tree, $lv = 0) {
 	return $result;
 }
 		
-function _uni_set($tree, $lv = 0) { return _uni_let($tree, $lv); }
-function _uni_let($tree, $lv = 0) {
+function _uni_let($tree, $lv = 0) { 
 	assert('is_array($tree[$lv-1]["data"])');
 	
 	$result = array('data' => $tree[$lv-1]['data'], 'metadata' => $tree[$lv-1]['metadata']);
 	
 	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
-//var_dump($args, $result['data']);
+// var_dump($args, $result['data']);
 	if(strncmp($args[0], './', 2) == 0)
 		$args[0] = substr($args[0], 2);
 	
@@ -4723,6 +5334,13 @@ function _uni_let($tree, $lv = 0) {
 	};
 	
 	return $result;
+}
+
+function _uni_asClass($tree, $lv = 0) {
+	return array(
+		'data' => $tree[$lv-1]['data'], 
+		'metadata' => array(is_null($tree[$lv-1]['data']) ? 'null' : 'class', 'key()' => $tree[$lv-1]['data'])
+	);
 }
 
 function _uni_toArray($tree, $lv = 0) {
@@ -4856,7 +5474,7 @@ function _uni_toHash($tree, $lv = 0) {
 	
 	// --- Вариант с cursor()
 	if(isset($tree[$lv-1]['metadata']['cursor()'])) {
-		assert('function_exists($tree[$lv-1]["metadata"]["cursor()"]);') or var_dump($tree[$lv-1]);
+		assert('function_exists($tree[$lv-1]["metadata"]["cursor()"]) or is_callable($tree[$lv-1]["metadata"]["cursor()"]);') or var_dump($tree[$lv-1]);
 	
 		$metadata = & $tree[$lv-1]["metadata"];
 		$next_limit = 10;
@@ -4888,7 +5506,7 @@ function _uni_toHash($tree, $lv = 0) {
 				return $result;
 		
 			// построим hash
-			foreach($data as $item) {
+			foreach($data as $curr_key => $item) {
 				if(array_key_exists($pkey, $item)) {
 					$new_key = $item[$pkey];
 					
@@ -4903,6 +5521,8 @@ function _uni_toHash($tree, $lv = 0) {
 						$result['data'][$new_key] = $item;
 
 				} 
+				else
+					$result['data'][$curr_key] = $item;
 			}
 // print_r($result); exit;
 		} 
@@ -5010,6 +5630,7 @@ function _uni_asDirectory($tree, $lv = 0) {
 	return $result;
 }
 
+function _uni_asZIP($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) { return _uni_asZIPFile($tree, $lv); }
 function _uni_asZIPFile($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 
 	// zip/NNN запись в Zip-архиве
@@ -5021,6 +5642,7 @@ function _uni_asZIPFile($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null)
 				'metadata' => array(
 					'null/zip-file',
 					'key()' => $cursor_arg1['name'], 
+					'cursor()' => __FUNCTION__,
 					'zip' => &$tree[$lv]['data'],
 					'zip_entry' => $entry
 					)
@@ -5030,19 +5652,36 @@ function _uni_asZIPFile($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null)
 
 			return $result;
 		} 
+		elseif(is_string($cursor_arg1['name'])) {
+			$entry = $tree[$lv]['data']->statName($cursor_arg1['name']);
+			$result = array(
+				'data' => $tree[$lv]['data']->getStream($entry['name']),
+				'metadata' => array(
+					'null/zip-file',
+					'key()' => $cursor_arg1['name'], 
+					'cursor()' => __FUNCTION__,
+					'zip' => &$tree[$lv]['data'],
+					'zip_entry' => $entry
+					)
+				);
+			if($result['data'])
+				$result['metadata'][0] = gettype($result['data']).'/zip-file';
+
+			return $result;
+		}
 		else {
 			trigger_error('UniPath.'.__FUNCTION__.': can`t get file by '.$tree[$lv]['name']);
 		}
 		
 		return array('data' => null, 'metadata' => array('null/zip-file'));
 	}
-	
-	if($cursor_cmd == 'eval' and $tree[$lv-1]['metadata'][0] == 'object/zip-file') {
+
+	if($cursor_cmd == 'eval' and in_array($tree[$lv]['metadata'][0], array('object/zip-file', 'resource/zip-file'))) {
 	
 		// zip/NNN/contents()
 		if(strpos($cursor_arg1['name'], 'contents(') === 0) {
 			$data = stream_get_contents($tree[$lv]['data']);
-			return array('data' => $data, 'metadata' => array(gettype($res).'/zip-file-contents'));
+			return array('data' => $data, 'metadata' => array(gettype($data).'/zip-file-contents'));
 		} 
 		
 		// zip/NNN/saveAs()
@@ -5295,7 +5934,7 @@ function _uni_first($tree, $lv = 0) {
 function _uni_regexp($tree, $lv = 0) {
 
 	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
-	
+
 	if(empty($args[0]))
 		return array('data' => false);
 		
@@ -5308,8 +5947,8 @@ function _uni_regexp($tree, $lv = 0) {
 		$arg1 = strval($arg1['data']);
 	} else
 		$arg1 = $args[0];
-		
-	if(preg_match("~$arg1~ui", $tree[$lv-1]['data'], $matches)) 
+
+	if(preg_match("~$arg1~u", $tree[$lv-1]['data'], $matches)) 
 		return array('data' => $matches, 'metadata' => array('array'));
 	else
 		return array('data' => null, 'metadata' => array('null'));
@@ -6420,6 +7059,25 @@ function _uni_fixOrientation($tree, $lv = 0) {
 	return array('data' => $tree[$lv-1]['data'], 'metadata' => isset($new_meta) ? $new_meta : $tree[$lv-1]['metadata']);
 }
 
+function _uni_toJPEG($tree, $lv = 0) {
+	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
+	
+	if(!isset($args['quality']))
+		$quality = 83;
+	elseif($args_types[0] == 'unipath')
+		$quality = __uni_with_start_data(
+				$tree[$lv-1]['data'],
+				$tree[$lv-1]['metadata'][0],
+				$tree[$lv-1]['metadata'],
+				$args['quality']);
+	else
+		$quality = $args['quality'];
+	
+	ob_start();
+	imagejpeg($tree[$lv-1]['data'], NULL, $quality);
+	return array('data' => ob_get_clean(), 'metadata' => array('string'));
+}
+
 function _uni_saveAs($tree, $lv = 0) {
 	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
 	
@@ -6445,21 +7103,31 @@ function _uni_saveAs($tree, $lv = 0) {
 				$result = imagepng($tree[$lv-1]['data'], $filepath, round($quality/10));
 			else 
 				$result = imagejpeg($tree[$lv-1]['data'], $filepath, $quality);
+			
+			if($result === false) {
+				trigger_error('Image not saved into - '.$filepath.'!', E_USER_WARNING);
+				return array(
+					'data' => $tree[$lv-1]['data'], 
+					'metadata' => $tree[$lv-1]['metadata'] + array(
+						'last_error()' => array(E_USER_WARNING, 'Image not saved into - '.$filepath.'!', __FILE__, __LINE__)));
+			}
 			break;
 		default:
 			$result = file_put_contents($filepath, $tree[$lv-1]['data']);
+			if($result === false) {
+				trigger_error('Data not saved into - '.$filepath.'!', E_USER_WARNING);
+				return array(
+					'data' => $tree[$lv-1]['data'], 
+					'metadata' => $tree[$lv-1]['metadata'] + array(
+						'last_error()' => array(E_USER_WARNING, 'Data not saved into - '.$filepath.'!', __FILE__, __LINE__)));
+			}
 			break;
 	}
 	
-	if($result === false) {
-		trigger_error('Image not saved into - '.$filepath.'!', E_USER_WARNING);
-		return array(
-			'data' => $tree[$lv-1]['data'], 
-			'metadata' => $tree[$lv-1]['metadata'] + array(
-				'last_error()' => array(E_USER_WARNING, 'Image not saved into - '.$filepath.'!', __FILE__, __LINE__)));
-	}
-	
-	return array('data' => $tree[$lv-1]['data'], 'metadata' => $tree[$lv-1]['metadata']);
+	return array(
+		'data' => $tree[$lv-1]['data'], 
+		'metadata' => $tree[$lv-1]['metadata']
+	);
 }
 
 function _uni_basename($tree, $lv = 0) {
@@ -6575,26 +7243,26 @@ function _uni_ArrayToXML($tree, $lv = 0) {
 
 function _uni_asHTML($tree, $lv = 0) { 
 	$dom = new DOMDocument();
-	$dom->loadHTML($tree[$lv-1]['data']);
+	$dom->loadHTML($tree[$lv-1]['data'], LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 	return array(
 		'data' => $dom,
 		'metadata' => array('object/'.get_class($dom), 'cursor()' => '_cursor_asDOM'));
 }
 
-function _uni_asXml($tree, $lv = 0) { 
+function _uni_asXML($tree, $lv = 0) { 
 // 	return _uni_asSimpleXML($tree, $lv); 
 // 	return _uni_asDOM($tree, $lv); 
 
 	$old_value = libxml_use_internal_errors(true);
 	$dom = new DOMDocument();
-	$dom->loadHTML($tree[$lv-1]['data']); // var_dump($dom->documentElement);
+	$dom->loadXML($tree[$lv-1]['data']); var_dump($dom->documentElement->childNodes);
 	libxml_use_internal_errors($old_value);
 	
 	// TODO: проверить: создалась ли html структура?
 	// если да, то предупредить?
 
 	return array(
-		'data' => $dom->documentElement->childNodes->item(0),
+		'data' => $dom->documentElement,
 		'metadata' => array('object/DOMElement', 'cursor()' => '_cursor_asXML'));
 }
 
@@ -6629,6 +7297,9 @@ function _cursor_asXML(&$tree, $lv = 0, $cursor_cmd = '', $cursor_arg1 = null) {
 	// REWIND
 	if($cursor_cmd == 'rewind') {
 		if($tree[$lv]['metadata'][0] == "object/DOMElement") {
+			return array('data' => $result['data']->textContent, 'metadata' => array('string'));
+		}
+		elseif($tree[$lv]['metadata'][0] == 'array/DOMElement') {
 			$tree[$lv]['metadata']['current_pos'] = 0;
 			return true;
 		}
@@ -6672,6 +7343,19 @@ function _cursor_asXML(&$tree, $lv = 0, $cursor_cmd = '', $cursor_arg1 = null) {
 
 		if($name == '.') return false;
 
+		
+		// asXML()/nodeValue
+		if($name == 'nodeValue') {
+			$result = array(
+				'data' => $tree[$lv]['data']->nodeValue, 
+				'metadata' => array(
+					gettype($tree[$lv]['data']->nodeValue), 
+					'key()' => $name
+				)
+			);
+			return $result;
+		}
+		
 		// asXML()/NNN
 		if(is_numeric($name)) {
 			if(is_array($tree[$lv]['data']) and isset($tree[$lv]['data'][$name])) {
@@ -6691,7 +7375,7 @@ function _cursor_asXML(&$tree, $lv = 0, $cursor_cmd = '', $cursor_arg1 = null) {
 						gettype($xml_elem).(is_object($xml_elem) ? '/'.get_class($xml_elem) : ''), 
 						'key()' => $name, 
 						'cursor()' => __FUNCTION__));
-print_r($result);
+
 				return $result;
 			}
 			elseif($tree[$lv]['metadata'][0] == 'object/SimpleXMLIterator' and $name < count($tree[$lv]['data'])) {
@@ -6754,7 +7438,7 @@ print_r($result);
 					'cursor()' => __FUNCTION__));
 
 				$name = strtolower($name); // почемуто все nodeName в нижнем регистре(?)
-				for($i = 0; $i < count($tree[$lv]['data']->childNodes); $i++) {
+				for($i = 0; $i < $tree[$lv]['data']->childNodes->length; $i++) {
 					$node = $tree[$lv]['data']->childNodes->item($i);
 					if($node->nodeName == $name)
 						$result['data'][] = $node;
@@ -6767,8 +7451,11 @@ print_r($result);
 					'key()' => $name, 
 					'cursor()' => __FUNCTION__));
 			}
+			else
+				trigger_error('UniPath.'.__FUNCTION__.': unknown type '.$tree[$lv]['metadata'][0]);
 // var_dump($result);
-			return $result;
+
+			return false;
 		}
 	}
 	

@@ -3,8 +3,8 @@ UniPath
 
 The library for universal access to any data from a PHP script (similar to xpath with jquery philosophy).
 
-Stable version: [unipath-2.2.3.php](https://github.com/SaemonZixel/unipath.php/raw/master/unipath.php)\
-Development version (have bugs!): [unipath-2.4.php](https://github.com/SaemonZixel/unipath.php/raw/master/unipath-2.4.php)
+Current version: [unipath-2.4rc2.php](https://github.com/SaemonZixel/unipath.php/raw/master/unipath-2.4.php)
+Old version: [unipath-2.2.3.php](https://github.com/SaemonZixel/unipath.php/raw/master/unipath.php)\
 
 DataBase
 --------
@@ -70,6 +70,13 @@ DataBase
 	//   'sql_params' => array()
 	// )
 	
+	uni("/db1/alias('table1', 't1')[t1.id = 1,2]+table2-as-t2[t1.id = t2.ref_id]/asSQLQuery()")
+	// array(
+	//   'sql_query' => 'SELECT * FROM table1 AS t1 LEFT JOIN table2 AS t2 ON t1.id = t2.ref_id WHERE t1.id IN (1,2)',
+	//   'sql_params' => array()
+	// )
+	// table_name-as-alias_name is syntactical sugar for alias() function
+	
 	uni("/db1/sql_query('SELECT * FROM table1')/0")
 	// array('id' => 1, 'field1' => 456, 'field2' => 'abc')
 	
@@ -87,7 +94,7 @@ DataBase (UPDATE, INSERT, DELETE)
 
 	Warning: the beta version of the library may contain bugs, that can delete or damage your data in the database.
 
-	Supported database drivers: ODBC, PDO, mysql_*.
+	Supported database drivers: ODBC, PDO, mysql_*, mysqli_*.
 	
 	For MS SQL Server there are special functions top(), sql_iconv(), like2(), chunked(), which have not been described yet.
 
@@ -187,8 +194,8 @@ Array
 	uni("/array1/[aaa > 200]")
 	// null
 	
-OOP
----
+Objects
+-------
 	global $mysqli_obj; // for 5.3 and upper
 	
 	$mysqli_obj = uni("/MySQLi/MySQLi('127.0.0.1', 'user', 'password', 'database1')")
@@ -220,25 +227,121 @@ XML
 	global $xml; // for 5.3 and upper
 
 	$xml = '<rows>
-		<row id="1"><cell index="1">1a</cell><cell index="2">2a</cell></row>
-		<row id="2"><cell index="1">1b</cell><cell index="2">2b</cell></row>
+		<row id="1"><cell index="1">111_AAA</cell><cell index="2">111_BBB</cell></row>
+		<row id="2"><cell index="1">222_AAA</cell><cell index="2">222_BBB</cell></row>
 	</rows>';
-	uni("/xml/asXML()/rows/0/row/1/cell/0")
-	// '1b'
+	uni("/xml/asXML()")
+	// object(DOMElement)#7 (18) {
+	//    ["nodeName"]=> 
+	//    string(4) "rows"
+	//    ["nodeValue"]=>
+	//    string(16) "
+	//        111_AAA111_BBB
+	//        222_AAA222_BBB
+	//    "
+	//    ...
+	// }
 	
-	uni("/xml/asXML()/rows/0/row/1/cell")
-	// array('1b', '2b')
+	uni("/xml/asXML()/nodeName")
+	// 'rows'
 	
-	uni("/xml/asXML()/rows/0/row/1")
-	// '<cell index="1">1b</cell><cell index="2">2b</cell>'
-	
-	uni("/xml/asXML()/rows/0/row")
+	uni("/xml/asXML()/row")
 	// array(
-	//   '<cell index="1">1a</cell><cell index="2">2a</cell>',
-	//   '<cell index="1">1b</cell><cell index="2">2b</cell>'
+	//    0 =>
+	//    object(DOMElement)#7 (18) {
+	//       ["nodeName"]=>
+	//       string(3) "row"
+	//       ...
+	//    },
+	//    1 =>
+	//    object(DOMElement)#3 (18) {
+    //       ["nodeName"]=>
+    //       string(3) "row"
+	//       ...
+	//    }
 	// )
 	
-	$array1 = array('items' => array('aaa' => 111, 'bbb' => 222, 'ccc' => 333))
+	
+	uni("/xml/asXML()row/0")
+	// object(DOMElement)#7 (18) {
+	//    ["nodeName"]=> 
+	//    string(4) "row"
+	//    ["nodeValue"]=>
+	//    string(16) "111_AAA111_BBB"
+	//    ...
+	// }
+	
+	
+	uni("/xml/asXML()/row/0/cell")
+	// array(
+	//    0 =>
+	//    object(DOMElement)#9 (18) {
+	//       ["nodeName"]=>
+	//       string(3) "cell"
+	//       ["nodeValue"]=>
+    //       string(2) "111_AAA"
+	//       ...
+	//    },
+	//    1 =>
+	//    object(DOMElement)#11 (18) {
+    //       ["nodeName"]=>
+    //       string(3) "cell"
+	//       ["nodeValue"]=>
+    //       string(2) "111_BBB"
+    //       ...
+	//    }
+	// )
+	
+	uni("/xml/asXML()/row/cell")
+	// array(
+	//    0 =>
+	//    object(DOMElement)#9 (18) {
+	//       ["nodeName"]=>
+	//       string(3) "cell"
+	//       ["nodeValue"]=>
+    //       string(2) "111_AAA"
+	//       ...
+	//    },
+	//    1 =>
+	//    object(DOMElement)#11 (18) {
+    //       ["nodeName"]=>
+    //       string(3) "cell"
+	//       ["nodeValue"]=>
+    //       string(2) "111_BBB"
+    //       ...
+	//    },
+	//    2 =>
+	//    object(DOMElement)#14 (18) {
+    //       ["nodeName"]=>
+    //       string(3) "cell"
+	//       ["nodeValue"]=>
+    //       string(2) "222_AAA"
+    //       ...
+	//    },
+	//    3 =>
+	//    object(DOMElement)#17 (18) {
+    //       ["nodeName"]=>
+    //       string(3) "cell"
+	//       ["nodeValue"]=>
+    //       string(2) "222_BBB"
+    //       ...
+	//    }
+	// )
+	
+	uni("/xml/asXML()/row/0/cell/0/nodeValue")
+	// '111_AAA'
+	
+	uni("/xml/asXML()/row/@id")
+	// '1'
+	
+	uni("/xml/asXML()/row/*/@id")
+	// array('1', '2')
+	
+	uni("/xml/asXML()/row/cell/*/nodeValue")
+	// array('111_AAA', '111_BBB', '222_AAA', '222_BBB')
+	
+	global $array1;
+	$array1 = array('items' => array('aaa' => 111, 'bbb' => 222, 'ccc' => 333));
 	uni('/array1/ArrayToXML()')
 	// '<items><aaa>111</aaa><bbb>222</bbb><ccc>333</ccc></items>'
 	
@@ -260,7 +363,7 @@ Image
 -----
 
 	uni("/fs()/images/image1.jpg/asImageFile()/resize(400, 500, 'fill')/crop(400, 500)/saveAs('/images/image1b.png')")
-	// (to save resized and croped image as '/images/image1b.png')
+	// (resized and croped image saved as '/images/image1b.png')
 	
 class Uni
 ---------
@@ -327,5 +430,14 @@ Templating
 	uni('/db1/table1[]/ssprintf(`<option value="%s"%s>%s</option>`, id, if([id=2], ` selected`, ``), field2)/join(`\n`)')
 	// <option value="1">ccc</option>
 	// <option value="2" selected>abc</option>
+	
+Debugging
+---------
+
+	$GLOBALS['unipath_debug_sql'] = true; // show all sql queres
+	
+	$GLOBALS['unipath_debug'] = true; // activate debugging of execution process
+	
+	$GLOBALS['unipath_debug_parse'] = true; // activate debugging of parser process
 	
 	

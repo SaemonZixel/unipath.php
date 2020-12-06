@@ -89,13 +89,14 @@ function _cursor_email($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) 
 		$body .= "This is a MIME encoded message." . $eol . $eol;
 
 		// тело сообщения
+		// TODO content-type?
 		if(!empty($tree[$lv]['data']['body'])) {
 			$body .= "--" . $boundary_separator . $eol;
 			$body .= "Content-Type: text/html; charset=\"utf-8\"" . $eol;
 			$body .= "Content-Transfer-Encoding: 8bit" . $eol . $eol;
 			$body .= $tree[$lv]['data']['body'] . $eol;
 		}
-		
+
 		// прикррепляем файлы
 		if(!empty($tree[$lv]['data']['files'])) 
 		foreach($tree[$lv]['data']['files'] as $file_rec) {
@@ -149,8 +150,9 @@ function _cursor_email($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) 
 			
 		$func_name = strtolower(substr($cursor_arg1['name'], 0, $pos));
 		switch($func_name) {
-			default: // subject, body
-				$result['data'][$func_name] = $args[0];
+			// TODO content-type
+			case 'bodyHtml': case 'bodyhtml':
+				$result['data']['body'] = $args[0];
 				break;
 			case 'from':
 /*				$result['data']['from'] = $args;
@@ -177,14 +179,16 @@ function _cursor_email($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) 
 				else
 					return array('data' => null, 'data_type' => 'null', 'metadata' => array('null', 'key()' => $func_name));
 				break;
-			case 'attacheFile':
-			case 'addFile':
+			case 'attacheFile': case 'attachefile':
+			case 'addFile': case 'addfile':
 			case 'file':
 				if(!isset($result['data']['files']))
 					$result['data']['files'] = array();
 				if(is_array($args[0])) 
 					foreach($args[0] as $file_rec) $result['data']['files'][] = $file_rec;
-				else 
+				elseif(isset($args['name']))
+					$result['data']['files'][] = array($args[0], $args['name']);
+				else
 					$result['data']['files'][] = $args;
 				break;
 			case 'send':
@@ -198,6 +202,7 @@ function _cursor_email($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) 
 				$headers = _cursor_email($tree, $lv, 'eval', array('name' => 'resultHeaders()'));
 // var_dump($headers);
 				$body = _cursor_email($tree, $lv, 'eval', array('name' => 'resultMessage()'));
+
 				$result['metadata']['last_send_result'] = call_user_func(
 					isset($GLOBALS['unipath_test_mail_function']) ? 
 						$GLOBALS['unipath_test_mail_function'] 
@@ -205,6 +210,9 @@ function _cursor_email($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) 
 					$to, $subject, $body['data'], 
 					$headers['data']);
 				$result['metadata']['last_error'] = error_get_last();
+				break;
+			default: // subject, body
+				$result['data'][$func_name] = $args[0];
 				break;
 		}
 // print_r($result);
@@ -232,8 +240,10 @@ function __test_mail($to, $subject, $message, $additional_headers = null, $addit
 function _tests_email() {
 	$GLOBALS['unipath_test_mail_function'] = '__test_mail';
 	
+	file_put_contents('unipath.email.test_attache_file', '999');
+	
 // $GLOBALS['unipath_debug'] = true;
-	$unipath = "/email()/to('root@localhost')/from('nobody@localhost')/subject(`test`)/body('123')/send()/last_send_result()";
+	$unipath = "/email()/to('root@localhost')/from('nobody@localhost')/subject(`test`)/body('123')/attacheFile(`unipath.email.test_attache_file`, name=`test.txt`))/send()/last_send_result()";
 	echo "<h3>--- $unipath ---</h3>";
 	$result = uni($unipath);
 // print_r($result);
@@ -256,15 +266,22 @@ Content-Type: text/html; charset=\"utf-8\"\r
 Content-Transfer-Encoding: 8bit\r
 \r
 123\r
+--{$boundary[1]}\r
+Content-Type: application/octet-stream; name=\"test.txt\"\r
+Content-Transfer-Encoding: base64\r
+Content-Disposition: attachment; filename=\"test.txt\"\r
+\r
+OTk5\r
+\r
 --{$boundary[1]}--";
 
 /*	for($i = 0; $i < strlen($expect); $i++) {
 		var_dump($i, substr($expect, 0, $i) == substr($GLOBALS['unipath_test_mail_arguments'][3], 0, $i), substr($expect, 0, $i));
 	} */
-	
+
 	assert('$GLOBALS[\'unipath_test_mail_arguments\'][3] == $expect; /* '.var_export($GLOBALS['unipath_test_mail_arguments'][3], true).' */');
-	
-	assert('$GLOBALS[\'unipath_test_mail_arguments\'][2]["data"] == $expect2; /* '.var_export($GLOBALS['unipath_test_mail_arguments'][2], true).' */');
+
+	assert('$GLOBALS[\'unipath_test_mail_arguments\'][2] == $expect2; /* '.var_export($GLOBALS['unipath_test_mail_arguments'][2], true).' */');
 }
 
 }

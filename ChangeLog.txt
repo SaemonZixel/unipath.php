@@ -1,3 +1,16 @@
+2020-12-06  Saemon Zixel  <saemonzixel@gmail.com>
+	
+	* version 2.4rc2
+	* class UniPathExtension
+	* SQL: mysqli support added 
+	* SQL: table_name-as-alias_name sintactic sugar
+	* SQL: improvements in UPDATE, DELETE
+	* brackets in expression (only for or/and)
+	* XML: refactored halfly (and broken halfly)
+	* added asClass(), asZip(), toJPEG()
+	* many bug fixes
+	* unipath.email: bodyHtml(), subject, body fields access
+
 2019-02-20  Saemon Zixel  <saemonzixel@gmail.com>
 	
 	* version 2.2.3: now compatible with php 7.x

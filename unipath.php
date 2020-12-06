@@ -3713,7 +3713,7 @@ var_dump(__FUNCTION__.'.data_tracking = ', $data_tracking);
 		}
 	}
 	
-	trigger_error("UniPath.__cursor_database($cursor_cmd): Unknown cursor command!", E_USER_ERROR);
+	trigger_error("UniPath.__cursor_database($cursor_cmd): Unknown cursor command! ({$tree[$lv]['unipath']})", E_USER_ERROR);
 	return null;
 }
 
