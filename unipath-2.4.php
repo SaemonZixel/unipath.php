@@ -3,7 +3,7 @@
 /**
  *  UniPath - XPath like access to DataBases, Files, XML, Arrays and any other data from PHP
  *  
- *  @version  2.4rc2
+ *  @version  2.4rc3
  *  @author   Saemon Zixel <saemonzixel@gmail.com>
  *  @link     https://github.com/SaemonZixel/unipath
  *
@@ -44,14 +44,25 @@ $__uni_assign_mode = false;
 
 function uni($unipath) {
 
+	// просят внутри использовать другой error_reporting режим
+	if(isset($GLOBALS['unipath_error_reporting'])) {
+		$old_error_reporting_level = error_reporting();
+		error_reporting($GLOBALS['unipath_error_reporting']);
+	}
+
 	if(func_num_args() > 1) {
 		$uni_result = __uni_with_start_data(null, null, null, $unipath, func_get_arg(1));
+		
+		// вернём обратно error_reporting
+		if(isset($old_error_reporting_level))
+			error_reporting($old_error_reporting_level);
+			
 		return $uni_result;
 	}
 		
 	$uni_result = __uni_with_start_data(null, null, null, $unipath);
 	
-if(!empty($GLOBALS['unipath_debug']) and !isset($uni_result['metadata'][0])) var_dump("Uni: metadata[0] is empty!", $uni_result);
+if(!empty($GLOBALS['unipath_debug']) and !isset($uni_result['metadata'][0])) var_dump(__FUNCTION__.": metadata[0] is empty!", $uni_result);
 
 	// cursor() - вытаскиваем все данные тогда
 	if(isset($uni_result['metadata']['cursor()'])) {
@@ -65,7 +76,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni: Start all()...");
 		// REWIND - сначало перемотаем в начало
 		// _cursor_database + array/db-row -> вернёт false, т.к. в data уже находятся конечные данные
 		$call_result = call_user_func_array($metadata["cursor()"], array(&$tree, 0, 'rewind'));
-if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni: {$metadata['cursor()']}(rewind) = ", $call_result);
+if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.": {$metadata['cursor()']}(rewind) = ", $call_result);
 		
 		// вернули данные? значит курсор указывал на одно значение, а не список значений
 		if(is_array($call_result)) {
@@ -81,7 +92,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni: {$metadata['cursor()']}(rew
 
 				// NEXT
 				$call_result = call_user_func_array($metadata['cursor()'], array(&$tree, 0, 'next', $__uni_prt_cnt));
-if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni: {$metadata['cursor()']}(next,$__uni_prt_cnt) = ", $call_result);
+if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.": {$metadata['cursor()']}(next,$__uni_prt_cnt) = ", $call_result);
 					
 				// в случии с пустым массивом или false - делать нечего, заканчиваем извлечение
 				if(empty($call_result))
@@ -93,11 +104,24 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni: {$metadata['cursor()']}(nex
 					$result['data'] += $call_result['data'];
 			}
 		}
+		
+		// перемотка неуспешная
+		else {
+			trigger_error(__FUNCTION__.": {$uni_result['metadata']['cursor()']}(REWIND) == false!");
+		}
+		
+		// вернём обратно error_reporting
+		if(isset($old_error_reporting_level))
+			error_reporting($old_error_reporting_level);
 			
 		// все данные вытащены, возвращаем их
 		return $result['data'];
 		
 	} // cursor()
+	
+	// вернём обратно error_reporting
+	if(isset($old_error_reporting_level))
+		error_reporting($old_error_reporting_level);
 			
 	return $uni_result['data'];
 }
@@ -345,9 +369,16 @@ class Uni extends ArrayIterator {
 	
 	function rewind() { 
 if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__.'()');
+
+		// просят внутри использовать другой error_reporting режим
+		if (!empty($GLOBALS['unipath_error_reporting'])) {
+			$old_error_reporting_level = error_reporting();
+			error_reporting($GLOBALS['unipath_error_reporting']);
+		}
+
 		// cursor()
 		if(isset($this->metadata['cursor()'])) {
-		
+			
 			// удалим результыты последнего обхода
 			unset($this->current_cursor_result);
 
@@ -361,8 +392,16 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__.'()');
 			$call_result = call_user_func_array($this->metadata['cursor()'], 
 				array(&$this->tree, count($this->tree)-1, 'rewind'));
 			
+			// вернём обратно error_reporting
+			isset($old_error_reporting_level) 
+				and error_reporting($old_error_reporting_level);
+			
 			return $call_result;
 		}
+		
+		// вернём обратно error_reporting
+		isset($old_error_reporting_level) 
+			and error_reporting($old_error_reporting_level);
 		
 		// normal data
 		if(is_array($this->data))
@@ -477,6 +516,13 @@ if(!empty($GLOBALS['unipath_debug']))  var_dump("Uni->".__FUNCTION__.'()');
 	function offsetUnset($offset_as_unipath) { return true; }
 	
 	function offsetSet($offset_as_unipath, $set_value) {
+	
+		// просят внутри использовать другой error_reporting режим
+		if (!empty($GLOBALS['unipath_error_reporting'])) {
+			$old_error_reporting_level = error_reporting();
+			error_reporting($GLOBALS['unipath_error_reporting']);
+		}
+
 		// (кастыль) для строки из базы нужно дозаполнить metadata
 		if (strpos($this->metadata[0], '/db-row-value') > 0 or strpos($this->metadata[0], '/db-row') > 0) {
 			$lv = count($this->tree)-1;
@@ -486,16 +532,29 @@ if(!empty($GLOBALS['unipath_debug']))  var_dump("Uni->".__FUNCTION__.'()');
 			$this->metadata['tables'] = $this->tree[$lv-1]['metadata']['tables'];
 		}
 	
-		return __uni_with_start_data(
+		$result = __uni_with_start_data(
 			$this->data, 
 			$this->metadata[0],
 			$this->metadata,
 			$offset_as_unipath,
 			$set_value
 			);
+		
+		// вернём обратно error_reporting
+		if(isset($old_error_reporting_level))
+			error_reporting($old_error_reporting_level);
+		
+		return $result;
 	}
 	
 	function offsetGet($offset_as_unipath) {
+	
+		// просят внутри использовать другой error_reporting режим
+		if (!empty($GLOBALS['unipath_error_reporting'])) {
+			$old_error_reporting_level = error_reporting();
+			error_reporting($GLOBALS['unipath_error_reporting']);
+		}
+	
 		$uni_result = __uni_with_start_data(
 			$this->data, 
 			$this->metadata[0],
@@ -503,6 +562,10 @@ if(!empty($GLOBALS['unipath_debug']))  var_dump("Uni->".__FUNCTION__.'()');
 			$offset_as_unipath
 			);
 
+		// вернём обратно error_reporting
+		if(isset($old_error_reporting_level))
+			error_reporting($old_error_reporting_level);
+			
 		if(array_key_exists('cursor()', $uni_result['metadata']) != false)
 			return new Uni($uni_result['data'], $uni_result['metadata']);
 		else
@@ -1385,7 +1448,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 			
 			$class_name = $tree[$lv-1]['data'];
 			$func_name = substr($name, 0, strpos($name, '('));
-		
+			
 			// создать объект?
 			if($func_name == $class_name or $func_name == '__construct') {
 				$func_src = empty($args) ? '' : "\$a['".implode("', \$a['", array_keys($args))."']";
@@ -1582,8 +1645,8 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 				$tree[$lv]['metadata'] = array('array');
 
 				// подготавливаем cursor() если это он
+				global $__uni_prt_cnt;
 				if(isset($tree[$lv-1]["metadata"]['cursor()'])) {
-					global $__uni_prt_cnt;
 					$data = new SplFixedArray($__uni_prt_cnt);
 					$cursor_ok = call_user_func_array(
 						$tree[$lv-1]["metadata"]['cursor()'],
@@ -1616,7 +1679,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 					}
 					elseif(isset($cursor_ok))
 						break;
-
+					
 					$args2 = $args;
 					for($i=0; $i < count($args2); $i++)
 						if($args2[$i] == '.') 
@@ -1632,6 +1695,11 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 
 					$tree[$lv]['data'][$key] = call_user_func_array($func_name, $args2);
 // var_dump(__FUNCTION__.'(php-foreach): ', $tree[$lv]['data'][$key], $func_name, $args2);
+
+					// сообщим про лимит
+					if($i == $__uni_prt_cnt-1 && is_object($data) && $data instanceof SplFixedArray) {
+						trigger_error('UniPath.php-foreach: $__uni_prt_cnt excedded! (break data process)', E_USER_WARNING);
+					}
 				}
 
 				// одиночное значение преобразуем обратно (?)
@@ -1644,7 +1712,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 		}
 		
 		// .[]/...%s...[] - повторная фильтрация данных с шаблоном ключя или без
-		elseif($name == '.' or strpos($name, '%') !== false /* or is_numeric($name) */) {
+		elseif(($name == '.' and !empty($tree[$lv]["filter"])) or strpos($name, '%') !== false) {
 			$tree[$lv]['data'] = array();
 			$tree[$lv]['metadata'] = array($tree[$lv-1]['metadata'][0]);
 			$metadata = $tree[$lv-1]['metadata'];
@@ -1933,7 +2001,7 @@ if(!empty($GLOBALS['unipath_debug'])) { var_dump("key = $key, filter = ".($filte
 		
 		// array/field, array/NNN
 		// DOMElement/field, DOMElement/NNN
-		elseif(in_array($name, array('', '.', '..', '*')) == false and strpos($name, '(') === false and strpos($name, ':') === false and strpos($name, '%') === false) {
+		elseif(in_array($name, array('', '.', '..', '*')) == false and strpos($name, '(') === false and (strpos($name, ':') === false || $prev_data_type == 'object/DOMElement') and strpos($name, '%') === false) {
 // 			and strncmp($prev_data_type, 'array', 5) == 0 and strpos($name, '(') === false):
 
 			// предыдущий это cursor()
@@ -1980,7 +2048,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 			elseif($prev_data_type == 'object/DOMElement') {
 				$tree[$lv]['data'] = array();
 				$tree[$lv]['metadata'] = array('array/DOMElement', 'key()' => $name);
-
+				
 				// node/childNodes[$name]
 				if(is_numeric($name)) {
 					if($tree[$lv-1]['data']->childNodes->length > $name) {
@@ -1993,9 +2061,15 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 					}
 				}
 				else {
+				
 					// @attribute
 					if($name[0] == '@') {
-						$tree[$lv]['data'] = $tree[$lv-1]['data']->getAttribute(substr($name, 1));
+						if(strpos($name, ':') === false)
+							$name = substr($name, 1);
+						else
+							$name = substr($name, strpos($name, ':')+1);
+
+						$tree[$lv]['data'] = $tree[$lv-1]['data']->getAttribute($name);
 						$tree[$lv]['metadata'][0] = gettype($tree[$lv]['data']);
 					}
 					// node->property
@@ -2064,6 +2138,26 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 			
 			// просто array()
 			elseif(is_array($tree[$lv-1]['data'])) {
+			
+				// проверим сначало на NameSpace
+				if(array_key_exists($name, $tree[$lv-1]['data']) == false and empty($tree[$lv]['filter'])) {
+					$class_name = $name;
+					for($l = $lv+1; $l < count($tree); $l++)
+						if(!empty($tree[$l]['name']) and strspn($tree[$l]['name'], '0123456789', 0, 1) == 0 and strpbrk($tree[$l]['name'], '[]().,+-="`\'') == false) {
+							// попробуем на класс
+							$class_name .= '\\'.$tree[$l]['name'];
+// var_dump(__FILE__.':'.__LINE__, $class_name, class_exists($class_name));
+							if(class_exists($class_name)) {
+								$lv = $l; // перемотаем
+								$tree[$lv]['data'] = $class_name;
+								$tree[$lv]['metadata'] = array('class', 'key()' => $class_name);
+								continue 2;
+							}
+						} 
+						else
+							break;
+				}
+				
 				$tree[$lv]['data'] = array_key_exists($name, $tree[$lv-1]['data']) 
 					? $tree[$lv-1]['data'][$name] 
 					: null;
@@ -2077,7 +2171,6 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 			else {
 				$tree[$lv]['data'] = null;
 				$tree[$lv]['metadata'] = array('null', 'key()' => $name);
-// 				$tree[$lv]['data_tracking']['this_step_is_copy_of_step'] = $lv-1;
 			};
 			
 			switch($tree[$lv]['metadata'][0]) {
@@ -2357,12 +2450,19 @@ is_array($tree[$lv-1]['metadata']) or var_dump($tree);
 		
 		// если не понятно что делать, тогда просто копируем данные
 		else {
-			trigger_error("UniPath.".__FUNCTION__.": unknown - ".$name.' (skip)', E_USER_NOTICE);
+			if($name == 'all()') {
+				/* all() - обычно используется вместе с cursor() */
+			}
+			elseif($name == '.') {
+				/* "./" - не является ошибкой */
+			}
+			else
+				trigger_error("UniPath.".__FUNCTION__.": unknown - ".$name.' (skip)', E_USER_NOTICE);
 		
 			$tree[$lv]['data'] = $lv > 0 ? $tree[$lv-1]['data'] : array();
 			$tree[$lv]['metadata'] = $lv > 0 && isset($tree[$lv-1]['metadata']) 
-			? $tree[$lv-1]['metadata']
-			: array('array');
+				? $tree[$lv-1]['metadata']
+				: array('array');
 			
 			// специально пометим, что это копия предыдущего шага
 			if( ! isset($tree[$lv]['metadata']['this_step_is_copy_of_step']))
@@ -2595,6 +2695,15 @@ if(!empty($GLOBALS['unipath_debug_parse'])) print_r($filter);
 if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("filter_braket_opened on $p");
 						$curr_braket_level += 1;
 
+						// если начало фильтра, то просто повысем braket_level
+						if(isset($filter[$expr]['left']) == false) {
+							$filter[$expr]['braket_level'] = $curr_braket_level;
+							$expr_key = "left";
+							$p++;
+if(!empty($GLOBALS['unipath_debug_parse'])) var_dump("increase_braket_level - $expr");
+							continue;
+						}
+						
 						// создаём новый узел выражения и вклиниваем его в цепочку
 						$old_expr = $expr;
 						$expr = 'expr'.($next_expr_num++);
@@ -2791,7 +2900,8 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('AND/OR detected! - '.$op);
 							else $old_expr = $filter[$old_expr]['next'];
 
 						// прикрепляемся справа (продолжаем цепочку)
-						if(in_array($filter[$old_expr]['op'], array('*','div','mod', '+','-', '=','>','<','>=','<=', '<>', '!=', 'and', 'or', 'left_eval')) && $filter[$old_expr]['braket_level'] == $curr_braket_level) {
+						if(in_array($filter[$old_expr]['op'], array('*','div','mod', '+','-', '=','>','<','>=','<=', '<>', '!=', 'and', 'or', 'left_eval')) && ($filter[$old_expr]['braket_level'] == $curr_braket_level
+						or $filter[$old_expr]["braket_level"] > $curr_braket_level && empty($filter[$old_expr]["next"]))) {
 							$expr = 'expr'.($next_expr_num++);
 							$filter[$expr] = array(
 								'left' => $old_expr,
@@ -3749,8 +3859,9 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("start \$metadata = ", $tree[$lv]
 		if(isset($GLOBALS['unipath_debug_sql'])) {
 			if(is_array($GLOBALS['unipath_debug_sql']))
 				$GLOBALS['unipath_debug_sql'][] = $sql_query;
+			elseif (error_reporting() & E_USER_NOTICE)
+				trigger_error('UniPath: '.__FUNCTION__.': '.$sql_query, E_USER_NOTICE);
 			else
-// 				trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
 				echo "\nUniPath.".__FUNCTION__.': '.$sql_query; // error_reporting(0);
 		}
 		
@@ -4044,7 +4155,7 @@ var_dump(__FUNCTION__.':'.__LINE__.': metadata = ', $metadata);
 		if(strpos($cursor_arg1['name'], '(') !== false
 		|| $cursor_arg1['name'] == '.'
 		|| is_numeric($cursor_arg1['name'])) { 
-if(!empty($GLOBALS['unipath_debug'])) var_dump((isset($tree[$lv]['name'])?$tree[$lv]['name']:'?')." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($cursor_arg1)&&isset($cursor_arg1['name'])?$cursor_arg1['name']:'').' - skip!');
+if(!empty($GLOBALS['unipath_debug'])) var_dump((isset($tree[$lv]['name'])?$tree[$lv]['name']:'?')." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($cursor_arg1)&&isset($cursor_arg1['name'])?$cursor_arg1['name']:'').' - cant process! (return false)');
 			return false;
 		}
 		
@@ -4348,7 +4459,6 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(implode(';',$db->errorInfo()).' =
 
 function __cursor_database_set($tree, $lv, $set_value, $cursor_arg1_metadata = null) {
 // print_r(array($tree[$lv]['data'], $set_value));
-
 	if(in_array($tree[$lv]["metadata"][0], array('null', 'NULL'))) {
 		trigger_error("UniPath.".__FUNCTION__.": metadata[0] == 'null'! Data not changed.", E_USER_NOTICE);
 		return false;
@@ -4477,22 +4587,27 @@ function __cursor_database_set($tree, $lv, $set_value, $cursor_arg1_metadata = n
 	}
 
 if(!empty($GLOBALS['unipath_debug'])) var_dump($sql_upd_set);
-	
+
 	// теперь добавим WHERE
 	$sql_upd_where = array(); $sql_upd_where_pkey_used = array();
 	foreach($sql_upd_set as $table => $values) {
 		$table_prefix = $table.'.'; $table_prefix_len = strlen($table)+1;
+
+		// если работаем только с одной таблицой, то можно все условия использовать
+// var_dump(__FILE__.':'.__LINE__, $data_type);
+		if(count($metadata['tables']) == 1 and strpos($data_type, '/db-row-value') === false) {
+			// ищем полное вырожение
+			for($expr = $metadata['tables'][$table]['start_expr']; !empty($metadata['tables'][$table][$expr]['next']);)
+				$expr = $metadata['tables'][$table][$expr]['next'];
+		
+			$sql_upd_where[$table][] = $metadata['tables'][$table][$expr]['sql'];
+			continue;
+		}
+		
 // var_dump($metadata['tables'][$table]);
 		foreach($metadata['tables'][$table] as $expr_id => $expr) if(is_array($expr)) {
 // var_dump($expr);
 
-			// если работаем только с одной таблицой, то можно все условия использовать
-// var_dump(__FILE__.':'.__LINE__, $data_type);
-			if(count($metadata['tables']) == 1 and strpos($data_type, '/db-row-value') === false) {
-				$sql_upd_where[$table][] = $expr['sql'];
-				continue;
-			}
-			
 			// пока что только col_name =... обрабатываем
 			if(empty($expr['op']) or in_array($expr['op'], array('=', '!=', '<>', '<', '>', '>=', '<=')) == false and $expr['left_type'] = 'name') {
 				trigger_error(__FUNCTION__.": can't use condition -> ".print_r($expr, true), E_USER_WARNING);
@@ -4605,9 +4720,10 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump($sql_upd);
 		if(isset($GLOBALS['unipath_debug_sql'])) {
 			if(is_array($GLOBALS['unipath_debug_sql']))
 				$GLOBALS['unipath_debug_sql'][] = $sql_upd;
+			elseif (error_reporting() & E_USER_NOTICE)
+				trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
 			else
-// 				trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
-				echo "\nUniPath.".__FUNCTION__.': '.$sql_upd; // error_reporting(0);
+				echo "\nUniPath: ".__FUNCTION__.': '.$sql_upd; // error_reporting(0);
 		}
 
 		$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = null;
@@ -4623,7 +4739,13 @@ if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === '
 } else {
 				if($res) $res_execute_result = $res->execute(array());
 }
-if(!empty($GLOBALS['unipath_debug_sql']) and !is_array($GLOBALS['unipath_debug_sql'])) var_dump("\$res = ".print_r($res, true).", \$res_execute_result = ".(isset($res_execute_result)?$res_execute_result:'undefined').", rowCount = ".(is_object($res) ? $res->rowCount(): 'NULL'));
+				// отладочный вывод о результате запроса
+				if(isset($GLOBALS['unipath_debug_sql']) and !is_array($GLOBALS['unipath_debug_sql'])) {
+					error_reporting() & E_USER_NOTICE
+						? trigger_error("\$res = ".print_r($res, true).", \$res_execute_result = ".(isset($res_execute_result)?$res_execute_result:'undefined').", rowCount = ".(is_object($res) ? $res->rowCount(): 'NULL'), E_USER_NOTICE)
+						: var_dump("\$res = ".print_r($res, true).", \$res_execute_result = ".(isset($res_execute_result)?$res_execute_result:'undefined').", rowCount = ".(is_object($res) ? $res->rowCount(): 'NULL'));
+				}
+				
 				// сообщим об ошибке в запросе
 				if(!$res or isset($res_execute_result) and !$res_execute_result) {
 					$err_info = $db->errorInfo();
@@ -4644,7 +4766,7 @@ if(!empty($GLOBALS['unipath_debug_sql']) and !is_array($GLOBALS['unipath_debug_s
 			case 'resource/odbc-link':
 				$res = odbc_prepare($db, $sql_upd);
 				if(empty($res)) {
-					trigger_error("UniPath: ODBC Prepare: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
+					trigger_error("UniPath: ".__FUNCTION__.": ODBC Prepare: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
 					$cache_item['last_error()'] = $cache_item["last_error($table)"] = array(odbc_error($db), odbc_errormsg($db));
 					break;
 				} 
@@ -4659,9 +4781,9 @@ if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === '
 }
 				if(isset($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate')
 					/* skip ??? */
-					trigger_error("UniPath: ODBC: unipath_debug_sql = simulate! ($sql_upd)", E_USER_NOTICE);
+					trigger_error("UniPath: ".__FUNCTION__.": ODBC: unipath_debug_sql = simulate! ($sql_upd)", E_USER_NOTICE);
 				elseif($res and !$res_execute_result) {
-					trigger_error("UniPath: ODBC Execute: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
+					trigger_error("UniPath: ".__FUNCTION__.": ODBC Execute: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
 					$cache_item['last_error()'] = $cache_item["last_error($table)"] = array(odbc_error($db), odbc_errormsg($db));
 				} else {
 					$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = odbc_num_rows($res);
@@ -4675,19 +4797,26 @@ if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === '
 				} else {
 					$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = mysql_affected_rows($db);
 				}
-if(!empty($GLOBALS['unipath_debug_sql']) and !is_array($GLOBALS['unipath_debug_sql'])) var_dump("\$db = ".print_r($db, true).", mysql_query() = ".$stmt.", mysql_affected_rows() = ".mysql_affected_rows($db).", mysql_errno() = ".mysql_errno($db).", mysql_error() = ".mysql_error($db));
+				
+				// отладочный вывод
+				if(isset($GLOBALS['unipath_debug_sql']) and !is_array($GLOBALS['unipath_debug_sql'])) {
+					error_reporting() & E_USER_NOTICE
+						? trigger_error("\$db = ".print_r($db, true).", mysql_query() = $stmt, mysql_affected_rows() = ".mysql_affected_rows($db).", mysql_errno() = ".mysql_errno($db).", mysql_error() = ".mysql_error($db), E_USER_NOTICE)
+						: var_dump("\$db = ".print_r($db, true).", mysql_query() = $stmt, mysql_affected_rows() = ".mysql_affected_rows($db).", mysql_errno() = ".mysql_errno($db).", mysql_error() = ".mysql_error($db));
+				}
 				break;
 			case 'object/mysqli':
 				$stmt = $db->query($sql_upd);
 				if(empty($stmt)) {
 					trigger_error("UniPath: ".__FUNCTION__.": MySQLi Query: errno={$db->errno}, error={$db->error} ($sql_upd)");
 					$cache_item['last_error()'] = $cache_item["last_error($table)"] = array($db->errno, $db->error);
-				} else {
+				} 
+				else {
 					$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = $db->affected_rows;
 				}
 				break;
 			default:
-				trigger_error("UniPath.".__FUNCTION__.": Don`t know how-to work with $db_type");
+				trigger_error("UniPath: ".__FUNCTION__.": We don`t know how-to work with $db_type");
 		}
 	}
 if(function_exists('mark')) mark("database_set(UPDATE)");
@@ -4732,6 +4861,7 @@ function _uni_last_error($tree, $lv = 0) {
 	return $result;
 }
 
+// TODO odbc support
 function _uni_add_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) { return _uni_new_row($tree, $lv); }
 function _uni_new($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) { return _uni_new_row($tree, $lv); }
 function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
@@ -4816,8 +4946,9 @@ function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 		if(isset($GLOBALS['unipath_debug_sql'])) {
 			if(is_array($GLOBALS['unipath_debug_sql']))
 				$GLOBALS['unipath_debug_sql'][] = $sql;
-			else
-// 				trigger_error('UniPath.'.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
+			elseif(error_reporting() & E_USER_NOTICE)
+ 				trigger_error('UniPath: '.__FUNCTION__.': '.$sql, E_USER_NOTICE);
+ 			else
 				echo "\nUniPath.".__FUNCTION__.': '.$sql; // error_reporting(0);
 		}
 
@@ -4833,6 +4964,7 @@ function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 			}
 		}
 		
+		// MySQLi
 		elseif ($db_type == 'object/mysqli') {
 			$stmt = $db->prepare($sql);
 			
@@ -4871,7 +5003,11 @@ function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 			elseif($stmt) 
 				$db_execute_result = $stmt->execute();
 
-if(!empty($GLOBALS['unipath_debug_sql'])) var_dump("\$stmt = ".print_r($stmt, true).", \$db_execute_result = ".(isset($db_execute_result)?$db_execute_result:'undefined').", rowCount = ".(is_object($stmt)?$stmt->rowCount():$stmt));
+			if(isset($GLOBALS['unipath_debug_sql'])) {
+				error_reporting() & E_USER_NOTICE
+					? trigger_error("\$stmt = ".print_r($stmt, true).", \$db_execute_result = ".(isset($db_execute_result)?$db_execute_result:'undefined').", rowCount = ".(is_object($stmt)?$stmt->rowCount():$stmt), E_USER_NOTICE)
+					: var_dump("\$stmt = ".print_r($stmt, true).", \$db_execute_result = ".(isset($db_execute_result)?$db_execute_result:'undefined').", rowCount = ".(is_object($stmt)?$stmt->rowCount():$stmt));
+			}
 	
 			if($stmt and !empty($db_execute_result)) {
 				$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = $stmt->rowCount();
@@ -4965,11 +5101,11 @@ if(!empty($GLOBALS['unipath_debug_sql']) and !is_array($GLOBALS['unipath_debug_s
 
 				if($err_info[0] == '00000' and isset($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate')
 					/* skip ??? */
-					trigger_error("UniPath.".__FUNCTION__.": PDO: unipath_debug_sql = simulate! ($sql)", E_USER_NOTICE);
+					trigger_error("UniPath: ".__FUNCTION__.": PDO: unipath_debug_sql = simulate! ($sql)", E_USER_NOTICE);
 				elseif($err_info[0] == '00000')
-					trigger_error("UniPath.".__FUNCTION__.": PDO: execute() return false! ($sql)", E_USER_NOTICE);
+					trigger_error("UniPath: ".__FUNCTION__.": PDO: execute() return false! ($sql)", E_USER_NOTICE);
 				else
-					trigger_error("UniPath.".__FUNCTION__.": PDO: ".implode(';',$err_info)." ($sql)", E_USER_NOTICE);
+					trigger_error("UniPath: ".__FUNCTION__.": PDO: ".implode(';',$err_info)." ($sql)", E_USER_NOTICE);
 					
 				$cache_item['last_error()'] = $cache_item["last_error($table)"] = $err_info;
 			} else {
@@ -4979,7 +5115,7 @@ if(!empty($GLOBALS['unipath_debug_sql']) and !is_array($GLOBALS['unipath_debug_s
 		case 'resource/odbc-link':
 			$res = odbc_prepare($db, $sql);
 			if(empty($res)) {
-				trigger_error("UniPath.".__FUNCTION__.": ODBC Prepare: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
+				trigger_error("UniPath: ".__FUNCTION__.": ODBC Prepare: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
 				$cache_item['last_error()'] = $cache_item["last_error($table)"] = array(odbc_error($db), odbc_errormsg($db));
 				break;
 			} 
@@ -4994,9 +5130,9 @@ if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === '
 }
 			if(isset($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate')
 				/* skip ??? */
-				trigger_error("UniPath.".__FUNCTION__.": ODBC: unipath_debug_sql = simulate! ($sql)", E_USER_NOTICE);
+				trigger_error("UniPath: ".__FUNCTION__.": ODBC: unipath_debug_sql = simulate! ($sql)", E_USER_NOTICE);
 			elseif($res and !$res_execute_result) {
-				trigger_error("UniPath.".__FUNCTION__.": ODBC Execute: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
+				trigger_error("UniPath: ".__FUNCTION__.": ODBC Execute: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
 				$cache_item['last_error()'] = $cache_item["last_error($table)"] = array(odbc_error($db), odbc_errormsg($db));
 			} else {
 				$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = odbc_num_rows($res);
@@ -5007,13 +5143,13 @@ if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === '
 				if(is_array($GLOBALS['unipath_debug_sql']))
 					$GLOBALS['unipath_debug_sql'][] = $sql;
 				else
-// 					trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
-					echo "\nUniPath.".__FUNCTION__.': '.$sql; // error_reporting(0);
+					trigger_error('UniPath: '.__FUNCTION__.': '.$sql, E_USER_NOTICE);
+// 					echo "\nUniPath: ".__FUNCTION__.': '.$sql; // error_reporting(0);
 			}
 		
 			$stmt = mysql_query($sql, $db);
 			if(empty($stmt)) {
-				trigger_error("UniPath.".__FUNCTION__.": MySQL Query: mysql_errno=".mysql_errno($db).", mysql_error=".mysql_error($db)." ($sql)");
+				trigger_error("UniPath: ".__FUNCTION__.": MySQL Query: mysql_errno=".mysql_errno($db).", mysql_error=".mysql_error($db)." ($sql)");
 				$cache_item['last_error()'] = array(mysql_errno($db), mysql_error($db));
 			} else {
 				$cache_item['last_affected_rows()'] = mysql_affected_rows($db);
@@ -5024,20 +5160,20 @@ if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === '
 				if(is_array($GLOBALS['unipath_debug_sql']))
 					$GLOBALS['unipath_debug_sql'][] = $sql;
 				else
-// 					trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
-					echo "\nUniPath.".__FUNCTION__.': '.$sql; // error_reporting(0);
+					trigger_error('UniPath: '.__FUNCTION__.': '.$sql, E_USER_NOTICE);
+// 					echo "\nUniPath.".__FUNCTION__.': '.$sql; // error_reporting(0);
 			}
 			
 			$stmt = mysqli_query($db, $sql);
 			if(empty($stmt)) {
-				trigger_error("UniPath.".__FUNCTION__.": MySQLi Query: mysqli_errno=".mysqli_errno($db).", mysqli_error=".mysqli_error($db)." ($sql)");
+				trigger_error("UniPath: ".__FUNCTION__.": MySQLi Query: mysqli_errno=".mysqli_errno($db).", mysqli_error=".mysqli_error($db)." ($sql)");
 				$cache_item['last_error()'] = array(mysqli_errno($db), mysqli_error($db));
 			} else {
 				$cache_item['last_affected_rows()'] = mysqli_affected_rows($db);
 			}
 			break;
 		default:
-			trigger_error("UniPath.".__FUNCTION__.": Don`t know how-to work with $db_type");
+			trigger_error("UniPath: ".__FUNCTION__.": We don`t know how-to work with $db_type");
 	}
 
 if(!empty($GLOBALS['unipath_debug'])) var_dump($sql, $cache_item["last_error($table)"]);
@@ -5055,7 +5191,7 @@ function _uni_insert_into($tree, $lv = 0) {
 			$tree[$lv-1]['metadata'], $args[0]);
 		
 		if(empty($dst['data'])) {
-			trigger_error('UniPath.'.__FUNCTION__.': arg1 is not database table description! (arg1 = '.json_encode($args[0]).')');
+			trigger_error('UniPath: '.__FUNCTION__.': arg1 is not database table description! (arg1 = '.json_encode($args[0]).')');
 			return array('data' => $tree[$lv-1]['data'], 'metadata' => $tree[$lv-1]['metadata']);
 		}
 		
@@ -5067,13 +5203,43 @@ function _uni_insert_into($tree, $lv = 0) {
 			if(is_null($val))
 				$sql_vals[] = 'NULL';
 			elseif(is_string($val))
-				$sql_vals[] = $db->quote($val);
+				$sql_vals[] = is_object($db) && method_exists($db, 'quote') // PDO
+					? $db->quote($val)
+					: (is_object($db) && method_exists($db, 'real_escape_string') // mysqli
+					? $db->real_escape_string($val)
+					: (function_exists('mysql_real_escape_string') // mysql
+					? mysql_real_escape_string(strval($val))
+					: "'".str_replace("'", "''", strval($val))."'")); // odbc
 			else
 				$sql_vals[] = $val;
 //echo "INSERT INTO {$dst['data'][1]} (".implode(', ', $sql_fileds).") VALUES (".implode(', ', $sql_vals).")";
-		$db->exec("INSERT INTO {$dst['data'][1]} (".implode(', ', $sql_fileds).") VALUES (".implode(', ', $sql_vals).")");
+		if (is_object($db) && method_exists($db, 'exec')) { // PDO
+			if($db->exec("INSERT INTO {$dst['data'][1]} (".implode(', ', $sql_fileds).") VALUES (".implode(', ', $sql_vals).")") == false)
+				trigger_error("UniPath: ".__FUNCTION__.": ".$db->errorInfo());
+			$result = $db->lastInsertId();
+		}
+		elseif (is_object($db) && method_exists($db, 'query')) { // mysqli
+			if($db->query("INSERT INTO {$dst['data'][1]} (".implode(', ', $sql_fileds).") VALUES (".implode(', ', $sql_vals).")") == false)
+				trigger_error("UniPath: ".__FUNCTION__.": {$db->error} ({$db->errno})");
+			$result = $db->insert_id;
+		}
+		elseif (function_exists('mysql_query')) { // mysql
+			if(mysql_query("INSERT INTO {$dst['data'][1]} (".implode(', ', $sql_fileds).") VALUES (".implode(', ', $sql_vals).")", $db) == false)
+				trigger_error("UniPath: ".__FUNCTION__.": ".mysql_error()." (".mysql_errno().")");
+			$result = mysql_insert_id($db);
+		}
+		elseif (function_exists('odbc_query')) { // odbc
+			if(odbc_exec($db, "INSERT INTO {$dst['data'][1]} (".implode(', ', $sql_fileds).") VALUES (".implode(', ', $sql_vals).")") == false)
+				trigger_error("UniPath: ".__FUNCTION__.": ".odbc_errormsg()." (".odbc_error().")");
+			$result = odbc_exec("SELECT @@IDENTITY AS LastID", $db);
+			$result = odbc_fetch_array($result);
+		}
+		else {
+			trigger_error("UniPath: ".__FUNCTION__.": We dont know how-to work with $db!");
+			$result = null;
+		}
 		
-		return array('data' => $db->lastInsertId(), 'metadata' => array('integer'));
+		return array('data' => $result, 'metadata' => array('integer'));
 	}
 	
 	return array('data' => null, 'metadata' => array('null'));
@@ -5305,7 +5471,24 @@ function _uni_unset($tree, $lv = 0) {
 	
 	return $result;
 }
-		
+
+function _uni_set($tree, $lv = 0) { 
+	assert('is_array($tree[$lv-1]["metadata"])');
+
+	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
+// var_dump($args, $result['data']);
+	assert('isset($args[0], $args[1])');
+
+	__uni_with_start_data(
+		$tree[$lv-1]['data'], null, 
+		$tree[$lv-1]['metadata'], 
+		$args[0], 
+		__uni_with_start_data($tree[$lv-1]['data'], null, $tree[$lv-1]['metadata'], $args[1]) 
+	);
+	
+	return array('data' => $tree[$lv-1]['data'], 'metadata' => $tree[$lv-1]['metadata']);
+}
+
 function _uni_let($tree, $lv = 0) { 
 	assert('is_array($tree[$lv-1]["data"])');
 	
@@ -5553,6 +5736,21 @@ function _uni_toHash($tree, $lv = 0) {
 					$result['data'][$new_key] = $val;
 
 			}
+			elseif (is_object($val) and $val instanceof DOMElement) {
+				$new_key = __uni_with_start_data($val, null, array(gettype($val), 'key()' => $key), $args[0]);
+				
+				if(!is_array($new_key) or !isset($new_key['data'])) {
+					trigger_error('UniPath.'.__FUNCTION__.': Invalid key - '.(is_array($new_key)?$new_key['data']:$new_key).'! (skip)');
+					continue;
+				}
+
+				if(isset($args[1]) and $args_types[1] == 'unipath') {
+					$uni_result = __uni_with_start_data($val, gettype($val), array(gettype($val), 'key()' => $key), $args[1]);
+					$result['data'][$new_key['data']] = $uni_result['data'];
+				} else
+					$result['data'][$new_key['data']] = $val;
+
+			}
 		} 
 
 		return $result;
@@ -5577,6 +5775,8 @@ function _uni_sum($tree, $lv = 0) {
 }
 
 function _uni_asFile($tree, $lv = 0) {
+	assert('isset($tree[$lv-1], $tree[$lv-1]["data"])');
+
 	$path = realpath($tree[$lv-1]['data']);
 // 	if(file_exists($path)) {
 		$result = array(
@@ -5585,7 +5785,7 @@ function _uni_asFile($tree, $lv = 0) {
 				'string/local-pathname',
 				'url' => 'file://'.$path, 
 				'key()' => $tree[$lv-1]['data'], 
-				'cursor()' => __FUNCTION__));
+				'cursor()' => '_cursor_asFile'));
 // 	}
 	return $result;
 }
@@ -7303,9 +7503,24 @@ function _cursor_asXML(&$tree, $lv = 0, $cursor_cmd = '', $cursor_arg1 = null) {
 			$tree[$lv]['metadata']['current_pos'] = 0;
 			return true;
 		}
-		elseif($tree[$lv]['metadata'] == 'object/SimpleXMLIterator')
+		elseif($tree[$lv]['metadata'][0] == 'object/SimpleXMLIterator') {
 			return $tree[$lv]['data']->rewind();
+		}
+		elseif($tree[$lv]['metadata'][0] == 'object/DOMNamedNodeMap') {
+			$result = array(
+				'data' => array(), 
+				'metadata' => array($tree[$lv]['data']->length 
+					? 'array/'.get_class($tree[$lv]['data']->item(0))
+					: 'array')
+			);
+				
+			for($i = 0; $i < $tree[$lv]['data']->length; $i++) {
+				$result['data'][$tree[$lv]['data']->item($i)->nodeName] = $tree[$lv]['data']->item($i);
+			}
 			
+			return $result;
+		}
+		
 		return false;
 	}
 	
@@ -7490,7 +7705,7 @@ print_r($result);
 			
 	// EVAL - attrs()
 	if($cursor_cmd == 'eval' and $cursor_arg1['name'] == 'attrs()') {
-		$xml_attrs = $tree[$lv]['data']->attributes();
+		$xml_attrs = $tree[$lv]['data']->attributes;
 		
 		// может вернуть NULL если это уже и есть список атрибутов
 		if(is_null($xml_attrs)) $xml_attrs = $tree[$lv]['data'];
@@ -7505,4 +7720,24 @@ print_r($result);
 				
 		return $result;
 	}
+}
+
+// для совместимости со старым кодом
+function _uni_attrs($tree, $lv = 0) {
+	assert('$tree[$lv-1]["data"] instanceof DOMElement');
+
+	$xml_attrs = $tree[$lv-1]['data']->attributes;
+		
+	// может вернуть NULL если это уже и есть список атрибутов
+	if(is_null($xml_attrs)) $xml_attrs = $tree[$lv-1]['data'];
+	
+	$result = array(
+		'data' => $xml_attrs,
+		'metadata' => array(
+			gettype($xml_attrs).(is_object($xml_attrs)?'/'.get_class($xml_attrs):''),
+			'key()' => 'attributes',
+			'cursor()' => '_cursor_asXML')
+	);
+			
+	return $result;
 }

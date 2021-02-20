@@ -1,3 +1,11 @@
+2021-02-18  Saemon Zixel  <saemonzixel@gmail.com>
+	
+	* version 2.4rc3
+	* added $unipath_error_reporting option
+	* NameSpace support added
+	* XML: finish refactoring
+	* bug fixes
+
 2020-12-06  Saemon Zixel  <saemonzixel@gmail.com>
 	
 	* version 2.4rc2

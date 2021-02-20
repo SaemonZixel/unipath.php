@@ -3,8 +3,9 @@ UniPath
 
 The library for universal access to any data from a PHP script (similar to xpath with jquery philosophy).
 
-Current version: [unipath-2.4rc2.php](https://github.com/SaemonZixel/unipath.php/raw/master/unipath-2.4.php)
-Old version: [unipath-2.2.3.php](https://github.com/SaemonZixel/unipath.php/raw/master/unipath.php)\
+Current version: [unipath-2.4rc3.php](https://github.com/SaemonZixel/unipath.php/raw/master/unipath-2.4.php)
+
+Old version: [unipath-2.2.3.php](https://github.com/SaemonZixel/unipath.php/raw/master/unipath.php)
 
 DataBase
 --------
@@ -331,7 +332,11 @@ XML
 	uni("/xml/asXML()/row/0/cell/0/nodeValue")
 	// '111_AAA'
 	
-	uni("/xml/asXML()/row/@id")
+	uni("/xml/asXML()/row/0/getAttribute('id')")
+	// '1'
+	
+	/* syntactical suggar to get attribute value more shortly */
+	uni("/xml/asXML()/row/0/@id")
 	// '1'
 	
 	uni("/xml/asXML()/row/*/@id")
@@ -438,6 +443,10 @@ Debugging
 	
 	$GLOBALS['unipath_debug'] = true; // activate debugging of execution process
 	
-	$GLOBALS['unipath_debug_parse'] = true; // activate debugging of parser process
+	$GLOBALS['unipath_debug_parse'] = true; // activate debugging of parsing process
 	
+	$GLOBALS['unipath_error_reporting'] = E_ALL; // change internal error_reporting level
+	
+	global $__uni_prt_cnt;
+	$__uni_prt_cnt = 1000000; // change infinity loop protection limit
 	
