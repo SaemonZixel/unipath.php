@@ -1,3 +1,9 @@
+2021-12-00  Saemon Zixel  <saemonzixel@gmail.com>
+
+	* version 2.4rc4
+	* image: toJPEG(), asImage()
+	* bug fixes
+
 2021-02-18  Saemon Zixel  <saemonzixel@gmail.com>
 	
 	* version 2.4rc3
@@ -15,7 +21,7 @@
 	* SQL: improvements in UPDATE, DELETE
 	* brackets in expression (only for or/and)
 	* XML: refactored halfly (and broken halfly)
-	* added asClass(), asZip(), toJPEG()
+	* added asClass(), asZip()
 	* many bug fixes
 	* unipath.email: bodyHtml(), subject, body fields access
 

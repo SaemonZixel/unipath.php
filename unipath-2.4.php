@@ -3,7 +3,7 @@
 /**
  *  UniPath - XPath like access to DataBases, Files, XML, Arrays and any other data from PHP
  *  
- *  @version  2.4rc3
+ *  @version  2.4rc4
  *  @author   Saemon Zixel <saemonzixel@gmail.com>
  *  @link     https://github.com/SaemonZixel/unipath
  *
@@ -17,7 +17,7 @@
  *
  *  @license  MIT
  *
- *  Copyright (c) 2013-2021 Saemon Zixel
+ *  Copyright (c) 2013-2023 Saemon Zixel
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software *  and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
  *
@@ -330,12 +330,12 @@ class Uni extends ArrayIterator {
 		}
 	
 		// если передали данные, то обернём их в объект
-		elseif(func_num_args() > 1) {
+		elseif(func_num_args() > 1 or is_string($unipath_or_data) == false) {
 			$this->tree = array(
 				array(
 					'name' => '', 
 					'data' => $unipath_or_data,
-					'metadata' => $metadata,
+					'metadata' => isset($metadata) ? $metadata : array(gettype($unipath_or_data) . (is_object($unipath_or_data) ? '/'.get_class($unipath_or_data) : '')),
 					'unipath' => null)
 			);
 		} 
@@ -1411,7 +1411,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 		}
 			
 		// [string/local-directory, string/local-entry]
-		elseif(strpos($name, '(') === false and in_array($prev_data_type, array('string/local-directory', 'string/local-entry'))) {
+		elseif((strpos($name, '(') === false or strpos($tree[$lv]['unipath'], '`', -1) !== false) and in_array($prev_data_type, array('string/local-directory', 'string/local-entry'))) {
 			if($name == '.') $path = realpath($tree[$lv-1]['data'].'/'.$name);
 			else $path = $tree[$lv-1]['data'].'/'.$name;
 
@@ -1437,8 +1437,9 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 // 						$tree[$lv]['data'] = file_get_contents($path);
 // 						$tree[$lv]['data_type'] = gettype($tree[$lv]['data']);
 // 					}
-				}
-			};
+				} else
+					trigger_error('UniPath.'.__FUNCTION__.": $name - is not a directory, a file or a link!", E_USER_WARNING);
+			}
 		}
 		
 		// Class::<name>()
@@ -2064,12 +2065,20 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 				
 					// @attribute
 					if($name[0] == '@') {
-						if(strpos($name, ':') === false)
-							$name = substr($name, 1);
-						else
-							$name = substr($name, strpos($name, ':')+1);
-
-						$tree[$lv]['data'] = $tree[$lv-1]['data']->getAttribute($name);
+						$name = substr($name, 1);
+							
+						if($tree[$lv-1]['data']->hasAttribute($name))
+							$tree[$lv]['data'] = $tree[$lv-1]['data']->getAttribute($name);
+							
+						// если не нашли атрибут и указан namespace, то попробуем без него
+						elseif(strpos($name, ':') === false) {
+							$name = substr($name, strpos($name, ':'));
+							for($i = 0; $i < $tree[$lv-1]['data']->attributes->length; $i++) {
+								if($tree[$lv-1]['data']->attributes->item($i)->localName == $name)
+									$tree[$lv]['data'] = $tree[$lv-1]['data']->attributes->item($i)->nodeValue;
+							}
+						}
+								
 						$tree[$lv]['metadata'][0] = gettype($tree[$lv]['data']);
 					}
 					// node->property
@@ -2457,7 +2466,7 @@ is_array($tree[$lv-1]['metadata']) or var_dump($tree);
 				/* "./" - не является ошибкой */
 			}
 			else
-				trigger_error("UniPath.".__FUNCTION__.": unknown - ".$name.' (skip)', E_USER_NOTICE);
+				trigger_error("UniPath.".__FUNCTION__.": unknown - ".$name.' (skip)', E_USER_WARNING);
 		
 			$tree[$lv]['data'] = $lv > 0 ? $tree[$lv-1]['data'] : array();
 			$tree[$lv]['metadata'] = $lv > 0 && isset($tree[$lv-1]['metadata']) 
@@ -5941,6 +5950,7 @@ function _uni_asZIPFile($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null)
 				'cursor()' => '_uni_asZIPFile'*/));
 }
 
+function _uni_uri($tree, $lv = 0) { return _uni_url($tree, $lv); }
 function _uni_url($tree, $lv = 0) {
 	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
 
@@ -6928,34 +6938,66 @@ function _uni_sprintf1(&$tree, $lv = 0) {
 	return $uni_result;
 }
 
+function _uni_asImage($tree, $lv = 0) {
+	$im1 = imagecreatefromstring($tree[$lv-1]['data']);
+	$img_info = getimagesizefromstring($tree[$lv-1]['data']);
+	return array(
+		'data' => $im1, 
+		'metadata' => array('resource/gd', 
+			'img_info' => $img_info, 
+			'exif_info' => isset($img_exif_info) ? $img_exif_info : null));
+}
+
 function _uni_asImageFile($tree, $lv = 0) {
 
-		if(!in_array($tree[$lv-1]['metadata'][0], array('string/pathname', 'string/local-pathname', 'string/url')))
+		if (!in_array($tree[$lv-1]['metadata'][0], array('string/pathname', 'string/local-pathname', 'string/url'))) {
+			trigger_error('UniPath:'.__FUNCTION__.': Unsupported data_type - '.$tree[$lv-1]['metadata'][0], E_USER_WARNING);
 			return array('data' => $tree[$lv-1]['data'], 'metadata' => $tree[$lv-1]['metadata']);
+		}
 		
-		// определим тип и загрузим фото
-		$img_info = getimagesize($tree[$lv-1]['data']);
+		// если http/https то сначала скачаем во временный файл
+		if ($tree[$lv-1]['metadata'][0] == 'string/url') {
+			$temp_file = $img_filename = tempnam(sys_get_temp_dir(), 'unipath');
+			if (copy($tree[$lv-1]['data'], $temp_file, stream_context_create(array('ssl' => array('verify_peer' => false)))) == 0) {
+				trigger_error('UniPath:'.__FUNCTION__.': Temp file is empty - '.$img_filename, E_USER_WARNING);
+				return array('data' => null, 'metadata' => array('null'));
+			}
+		}
+		else {
+			$img_filename = $tree[$lv-1]['data'];
+		}
+		
+		// определим тип 
+		$img_info = getimagesize($img_filename);
+
+		// не удалось определить тип, это не изображение!
+		if ($img_info === false) {
+			trigger_error('UniPath:'.__FUNCTION__.': Unknown image type in - '.$img_filename, E_USER_WARNING);
+			return array('data' => null, 'metadata' => array('null'));
+		}
+
+		// загрузим файл в память
 		switch($img_info[2]) {
 			case IMAGETYPE_JPEG: 
 				// подавим "libjpeg: recoverable error: Invalid SOS parameters for sequential JPEG"
 				@ini_set('gd.jpeg_ignore_warning', 1);
-				$im1 = @imagecreatefromjpeg($tree[$lv-1]['data']); 
+				$im1 = @imagecreatefromjpeg($img_filename); 
 				if (function_exists('exif_read_data'))
-					$img_exif_info = @exif_read_data($tree[$lv-1]['data']);
+					$img_exif_info = @exif_read_data($img_filename);
 					
 				// найдём вручную тогда только Orientation
 				if(!isset($img_exif_info) || empty($img_exif_info)) {
-					$first4K = file_get_contents($tree[$lv-1]['data'], NULL, NULL, 0, 4096);
+					$first4K = file_get_contents($img_filename, NULL, NULL, 0, 4096);
 					if(preg_match('~\x12\x01\x03\x00\x01\x00\x00\x00(.)\x00~', $first4K, $bytes)
 					|| preg_match('~\x01\x12\x00\x03\x00\x00\x00\x01\x00(.)~', $first4K, $bytes))
 						$img_exif_info = array('Orientation' => ord($bytes[1]));
 				}
 				break;
 			case IMAGETYPE_GIF: 
-				$im1 = imagecreatefromgif($tree[$lv-1]['data']); 
+				$im1 = imagecreatefromgif($img_filename); 
 				break;
 			case IMAGETYPE_PNG: 
-				if(!isset($im1)) $im1 = imagecreatefrompng($tree[$lv-1]['data']); 
+				if(!isset($im1)) $im1 = imagecreatefrompng($img_filename); 
 				$im0 = imagecreatetruecolor($img_info[0], $img_info[1]);
 				imagealphablending($im0, false);
 				imagesavealpha($im0,true);
@@ -6965,10 +7007,17 @@ function _uni_asImageFile($tree, $lv = 0) {
 				imagedestroy($im1);
 				$im1 = $im0;
 				break;
-			default: $im1 = imagecreatefromstring(file_get_contents($tree[$lv-1]['data']));
+			default: $im1 = imagecreatefromstring(file_get_contents($img_filename));
 		}
 		
-		return array('data' => $im1, 'metadata' => array('resource/gd', 'img_info' => $img_info, 'exif_info' => isset($img_exif_info) ? $img_exif_info : null));
+		// если скачивали во временный файл, то удалим его
+		if (isset($temp_file)) @unlink($temp_file);
+		
+		return array(
+			'data' => $im1, 
+			'metadata' => array('resource/gd', 
+				'img_info' => $img_info, 
+				'exif_info' => isset($img_exif_info) ? $img_exif_info : null));
 }
 
 function _uni_resize($tree, $lv = 0) {
@@ -7007,7 +7056,10 @@ function _uni_resize($tree, $lv = 0) {
 	else
 		$resize_mode = $args[2];
 	
-	assert('is_resource($tree[$lv-1]["data"])') or print_r($tree[$lv-1]);
+	if (is_resource($tree[$lv-1]["data"]) == false) {
+		trigger_error('UniPath:'.__FUNCTION__.': Not a resource!', E_USER_WARNING);
+		return array('data' => null, 'metadata' => $tree[$lv-1]['metadata']);
+	}
 	
 	// расчитываем новые размеры в соответствии с указанным режимом
 	$height = 0; 
@@ -7264,7 +7316,7 @@ function _uni_toJPEG($tree, $lv = 0) {
 	
 	if(!isset($args['quality']))
 		$quality = 83;
-	elseif($args_types[0] == 'unipath')
+	elseif($args_types['quality'] == 'unipath')
 		$quality = __uni_with_start_data(
 				$tree[$lv-1]['data'],
 				$tree[$lv-1]['metadata'][0],
@@ -7273,9 +7325,13 @@ function _uni_toJPEG($tree, $lv = 0) {
 	else
 		$quality = $args['quality'];
 	
-	ob_start();
-	imagejpeg($tree[$lv-1]['data'], NULL, $quality);
-	return array('data' => ob_get_clean(), 'metadata' => array('string'));
+	$stream = fopen("php://memory", "w+");
+	imagejpeg($tree[$lv-1]['data'], $stream, $quality);
+	rewind($stream);
+	$result = stream_get_contents($stream);
+	fclose($stream);
+	
+	return array('data' => $result, 'metadata' => array('string'));
 }
 
 function _uni_saveAs($tree, $lv = 0) {

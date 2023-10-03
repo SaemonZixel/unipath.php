@@ -1658,6 +1658,18 @@ if(isset($_GET['test_uniPath'])) {
 //$GLOBALS['unipath_debug'] = false;
 
 // $GLOBALS['unipath_debug'] = true;
+	file_put_contents('Test\'s file (1).txt', '123321');
+	$unipath = 'fs()/./`Test\'s file (1).txt`';
+	echo "<h3>--- $unipath = 123 ---</h3>";
+	uni($unipath, '123');
+	assert('file_get_contents("unipath_test.txt") == "123" /* '.@file_get_contents("unipath_test.txt").' */');
+	$file_content = uni($unipath.'/contents()');
+	assert('$file_content == "123"; /* '.print_r($file_content,true).' */');
+// 	@unlink('Test\'s file (1).txt');
+// $GLOBALS['unipath_debug'] = false;
+
+
+// $GLOBALS['unipath_debug'] = true;
 	if(!file_exists('unipath_test.txt')) file_put_contents('unipath_test.txt', '123');
 	$unipath = 'url(file://./unipath_test.txt)';
 	echo "<h3>--- $unipath = 123 ---</h3>";
