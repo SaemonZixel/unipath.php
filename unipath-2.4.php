@@ -3,7 +3,7 @@
 /**
  *  UniPath - XPath like access to DataBases, Files, XML, Arrays and any other data from PHP
  *  
- *  @version  2.4rc4
+ *  @version  2.4rc5
  *  @author   Saemon Zixel <saemonzixel@gmail.com>
  *  @link     https://github.com/SaemonZixel/unipath
  *
@@ -17,7 +17,7 @@
  *
  *  @license  MIT
  *
- *  Copyright (c) 2013-2023 Saemon Zixel
+ *  Copyright (c) 2013-2024 Saemon Zixel
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy of this software *  and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
  *
@@ -321,6 +321,8 @@ class Uni extends ArrayIterator {
 	public $tree = array(); // разобранное и выполненое дерево текущего unipath
 	public $data = null; // текущие данные последнего узла в дереве
 	public $metadata = array('null');
+	public $unipath = null;
+	public $current_cursor_result = null;
 
 	function __construct($unipath_or_data, $metadata = null) {
 	
@@ -367,8 +369,9 @@ class Uni extends ArrayIterator {
 		return $result;
 	}
 	
+	#[\ReturnTypeWillChange]
 	function rewind() { 
-if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__.'()');
+		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__.'()');
 
 		// просят внутри использовать другой error_reporting режим
 		if (!empty($GLOBALS['unipath_error_reporting'])) {
@@ -410,11 +413,13 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__.'()');
 		return true;
 	}
 	
+	#[\ReturnTypeWillChange]
 	function current() { 
-if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__.'()');
+		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__.'()');
+
 		// cursor()
 		if(isset($this->current_cursor_result)) {
-if(!empty($GLOBALS['unipath_debug']))  var_dump('Uni->current(): cursor()');
+			if(!empty($GLOBALS['unipath_debug']))  trigger_error('Uni->current(): cursor()');
 
 			if(array_key_exists('cursor()', $this->current_cursor_result['metadata']) != false)
 				return new Uni(
@@ -428,12 +433,18 @@ if(!empty($GLOBALS['unipath_debug']))  var_dump('Uni->current(): cursor()');
 		}
 		
 		// normal data
-		$result = current($this->data);
+		if (!isset($this->data))
+			$result = null;
+		else
+			$result = current($this->data);
+
 		return $result;
 	}
 	
+	#[\ReturnTypeWillChange]
 	function key() { 
-if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__.'()');
+		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__.'()');
+
 		// cursor()
 		if(isset($this->metadata['cursor()'])) {
 			if(isset($this->current_cursor_result['metadata']['key()']))
@@ -449,8 +460,10 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__.'()');
 			return 0;
 	}
 	
+	#[\ReturnTypeWillChange]
 	function next() { 
-if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__.'()');
+		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__.'()');
+
 		// cursor()
 		if(isset($this->metadata['cursor()'])) {
 
@@ -476,8 +489,10 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__.'()');
 			return false;
 	}
 	
+	#[\ReturnTypeWillChange]
 	function valid() { 
-if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__."(), property_exists(\$this->current_cursor_result) = ".(property_exists($this, 'current_cursor_result')?'true':'false').', cursor() = '.$this->metadata['cursor()']);
+		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__."(), property_exists(\$this->current_cursor_result) = ".(property_exists($this, 'current_cursor_result')?'true':'false').', cursor() = '.$this->metadata['cursor()']);
+
 		// cursor() - сразу возмём следующую строку
 		if(isset($this->metadata['cursor()'])) {
 		
@@ -497,11 +512,13 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("Uni->".__FUNCTION__."(), propert
 		return ($key !== NULL && $key !== FALSE); 
 	}
 	
+	#[\ReturnTypeWillChange]
 	function count() { 
-if(!empty($GLOBALS['unipath_debug']))  var_dump("Uni->".__FUNCTION__.'()');
+		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__.'()');
+
 		// cursor()
 		if(isset($this->metadata['cursor()'])) {
-			trigger_error('Uni->count(): cursor() not countable!');
+			trigger_error('Uni->count(): cursor() not countable!', E_USER_WARNING);
 			return 0;
 		}
 	
@@ -511,10 +528,14 @@ if(!empty($GLOBALS['unipath_debug']))  var_dump("Uni->".__FUNCTION__.'()');
 		else
 			return 1;
 	}
-	
+
+	#[\ReturnTypeWillChange]
 	function offsetExists($offset_as_unipath) { return true; }
+
+	#[\ReturnTypeWillChange]
 	function offsetUnset($offset_as_unipath) { return true; }
 	
+	#[\ReturnTypeWillChange]
 	function offsetSet($offset_as_unipath, $set_value) {
 	
 		// просят внутри использовать другой error_reporting режим
@@ -547,6 +568,7 @@ if(!empty($GLOBALS['unipath_debug']))  var_dump("Uni->".__FUNCTION__.'()');
 		return $result;
 	}
 	
+	#[\ReturnTypeWillChange]
 	function offsetGet($offset_as_unipath) {
 	
 		// просят внутри использовать другой error_reporting режим
@@ -1452,9 +1474,14 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("next().\$call_result => ", $call
 			
 			// создать объект?
 			if($func_name == $class_name or $func_name == '__construct') {
-				$func_src = empty($args) ? '' : "\$a['".implode("', \$a['", array_keys($args))."']";
-				$func = create_function('$a', "return new $class_name($func_src);");
-				$tree[$lv]['data'] = call_user_func($func, $args);
+				if (function_exists('create_function')) {
+					$func_src = empty($args) ? '' : "\$a['".implode("', \$a['", array_keys($args))."']";
+					$func = create_function('$a', "return new $class_name($func_src);");
+					$tree[$lv]['data'] = call_user_func($func, $args);
+				}
+				else {
+					$tree[$lv]['data'] = eval("return new $class_name(".(empty($args) ? '' : "\$args['".implode("', \$args['", array_keys($args))."']").");");
+				}
 				$tree[$lv]['metadata'] = array(gettype($tree[$lv]['data']) . (is_object($tree[$lv]['data']) ? '/'.get_class($tree[$lv]['data']) : ''));
 			}
 			
@@ -2181,7 +2208,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 				$tree[$lv]['data'] = null;
 				$tree[$lv]['metadata'] = array('null', 'key()' => $name);
 			};
-			
+
 			switch($tree[$lv]['metadata'][0]) {
 				case 'object':
 					$tree[$lv]['metadata'][0] = "object/".get_class($tree[$lv]['data']);
@@ -2193,13 +2220,13 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__."(array/field, array
 			
 			// незабываем про data_tracking
 			//$tree[$lv]['metadata']['key()'] = $name;
-		
+
 			// filter1
 			if(!empty($filter) and strpos($tree[$lv]['metadata'][0], 'array') === 0) {
 				$result = array();
-				
+
 				// фильтруем каждый эллемент массива
-				for(reset($tree[$lv]['data']); list($key, $val) = each($tree[$lv]['data']);) {
+				for($val = reset($tree[$lv]['data']); !is_null($key = key($tree[$lv]['data'])); $val = next($tree[$lv]['data'])) {
 
 					if(!isset($filter['expr1']))
 						$filter_pass = true;
@@ -2530,8 +2557,9 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('Parsing - '.$xpath);
 		
 		// абсалютный путь - стартовые данные это $GLOBALS
 		// для относительного, если не передали стартовые данные, то тоже $GLOBALS
+		// TODO $GLOBALS can only be modified using the $GLOBALS[$name] = $value syntax
 		if($xpath[0] == '/' or is_null($start_data) and is_null($start_data_type) and is_null($start_data_tracking))
-			$tree[] = array('name' => '?start_data?', 'data' => &$GLOBALS, 'metadata' => array('array'), 'unipath' => ''); 
+			$tree[] = array('name' => '?start_data?', 'data' => /* & */$GLOBALS, 'metadata' => array('array'), 'unipath' => '');
 			
 		// относительный путь - стартовые данные берём, которые передали
 		else {
@@ -4320,12 +4348,14 @@ function __cursor_database_describe_tables($tables, $db, &$cache_item) {
 		switch($db_type) {
 			case 'object/PDO':
 				$first_table = $need_describe_table[0];
+				try {
 				$res = $db->query(str_replace('?', $dbms == 'oracle' ? strtoupper($first_table) : $first_table, $sql));
+				} catch(PDOException $ex) { $res = null; }
 				
 				// неподошло
 				if(!$res) {
-if(!empty($GLOBALS['unipath_debug'])) var_dump(implode(';',$db->errorInfo()).' => '.str_replace('?', $dbms == 'oracle' ? strtoupper($first_table) : $first_table, $sql));
-					continue;
+					if(!empty($GLOBALS['unipath_debug'])) trigger_error(implode(';',$db->errorInfo()).' => '.str_replace('?', $dbms == 'oracle' ? strtoupper($first_table) : $first_table, $sql));
+					break;
 				} 
 				
 				// подошло
@@ -4382,7 +4412,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(implode(';',$db->errorInfo()).' =
 				// неподошло
 				if(!$res or empty($res_execute_result)) {
 					// $err_info = $db->errorInfo();
-					continue;
+					break;
 				} 
 				
 				// подошло
@@ -4419,7 +4449,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(implode(';',$db->errorInfo()).' =
 				}
 				break;
 			case 'resource/mysql-link':
-				if($dbms != 'mysql') continue;
+				if($dbms != 'mysql') break;
 			
 				foreach($need_describe_table as $table) {
 					$res = mysql_query(str_replace('?', $table, $sql), $db);
@@ -4439,7 +4469,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(implode(';',$db->errorInfo()).' =
 				}
 				break 2;
 			case 'object/mysqli':
-				if($dbms != 'mysqli') continue;
+				if($dbms != 'mysqli') break;
 				
 				foreach($need_describe_table as $table) {
 					$res = $db->query(str_replace('?', $table, $sql));
@@ -4721,10 +4751,12 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump($sql_upd_set);
 	foreach($sql_upd_set as $table => $new_values) {
 	
 		// сформируем конечный запрос
-		$sql_upd = "UPDATE $table SET "
-			.implode(', ', array_map(create_function('$a, $b', 'return "$b = $a";'), $new_values, array_keys($new_values)))
-			.(isset($sql_upd_where[$table]) ? " WHERE ".implode(' OR ',$sql_upd_where[$table]) : '');
-if(!empty($GLOBALS['unipath_debug'])) var_dump($sql_upd);
+		$sql_upd = "";
+		foreach($new_values as $k => $v)
+			$sql_upd .=  empty($sql_upd) ? "$k = $v" : ", $k = $v";
+		$sql_upd = "UPDATE $table SET $sql_upd".(isset($sql_upd_where[$table]) ? " WHERE ".implode(' OR ',$sql_upd_where[$table]) : '');
+		if(!empty($GLOBALS['unipath_debug'])) var_dump($sql_upd);
+
 		// отладка SQL-запросов
 		if(isset($GLOBALS['unipath_debug_sql'])) {
 			if(is_array($GLOBALS['unipath_debug_sql']))
@@ -6423,8 +6455,11 @@ function _uni_split($tree, $lv = 0) {
 	$result = array('metadata' => array('array'));
 	if(!is_array($tree[$lv-1]['data']))
 		$result['data'] = explode($arg1, strval($tree[$lv-1]['data']));
-	else
-		$result['data'] = array_map(create_function('$a','return explode(\''.$arg1.'\', $a);'), $tree[$lv-1]['data']);
+	else {
+		$result['data'] = array();
+		foreach($tree[$lv-1]['data'] as $key => $val)
+			$result['data'][$key] = explode($arg1, $val);
+	}
 
 	return $result;
 }
@@ -6985,12 +7020,29 @@ function _uni_asImageFile($tree, $lv = 0) {
 				if (function_exists('exif_read_data'))
 					$img_exif_info = @exif_read_data($img_filename);
 					
-				// найдём вручную тогда только Orientation
+				// найдём вручную тогда только Orientation, Comment
 				if(!isset($img_exif_info) || empty($img_exif_info)) {
-					$first4K = file_get_contents($img_filename, NULL, NULL, 0, 4096);
+					$first4K = file_get_contents($img_filename, false, NULL, 0, 4096);
+
+					// Orientation
 					if(preg_match('~\x12\x01\x03\x00\x01\x00\x00\x00(.)\x00~', $first4K, $bytes)
 					|| preg_match('~\x01\x12\x00\x03\x00\x00\x00\x01\x00(.)~', $first4K, $bytes))
-						$img_exif_info = array('Orientation' => ord($bytes[1]));
+						$img_exif_info = array('Orientation' => ord($bytes[1]) /* 8=90deg, 3=180deg,6=-90deg */);
+					// Comment
+					if(($comment_offset = mb_strpos($first4K, "\xFF\xFE", 0, 'ISO-8859-1')) !== false)
+						$comment_len = ord($first4K[$comment_offset+3]) + ord($first4K[$comment_offset+2])*256;
+					elseif (($comment_offset = mb_strpos($first4K, "\xFE\xFF", 0, 'ISO-8859-1')) !== false)
+						$comment_len = ord($first4K[$comment_offset+2]) + ord($first4K[$comment_offset+3])*256;
+					else
+						$comment_len = null;
+
+					if ($comment_len and $comment_offset > 0) {
+						$comment = mb_substr($first4K, $comment_offset+4, $comment_len-2, 'ISO-8859-1');
+						if (!isset($img_exif_info))
+							$img_exif_info = array('Comment' => $comment);
+						else
+							$img_exif_info['Comment'] = $comment;
+					}
 				}
 				break;
 			case IMAGETYPE_GIF: 
@@ -7012,12 +7064,19 @@ function _uni_asImageFile($tree, $lv = 0) {
 		
 		// если скачивали во временный файл, то удалим его
 		if (isset($temp_file)) @unlink($temp_file);
-		
+
 		return array(
 			'data' => $im1, 
 			'metadata' => array('resource/gd', 
 				'img_info' => $img_info, 
 				'exif_info' => isset($img_exif_info) ? $img_exif_info : null));
+}
+
+function _uni_exif_info($tree, $lv = 0) {
+	return array(
+		'data' => isset($tree[$lv]['metadata']['exif_info']) ? $tree[$lv]['metadata']['exif_info'] : null,
+		'metadata' => array(isset($tree[$lv]['metadata']['exif_info']) ? gettype($tree[$lv]['metadata']['exif_info']) : 'null')
+	);
 }
 
 function _uni_resize($tree, $lv = 0) {
@@ -7289,17 +7348,17 @@ function _uni_fixOrientation($tree, $lv = 0) {
 	if(isset($tree[$lv-1]['metadata']['exif_info'])) {
 		$new_meta = $tree[$lv-1]['metadata'];
 		switch(isset($new_meta['exif_info']['Orientation']) ? $new_meta['exif_info']['Orientation'] : 0){
-			case 3:
+			case 3: // 90deg
 				$tree[$lv-1]['data'] = imagerotate($tree[$lv-1]['data'], 180, 0);
 				$new_meta['exif_info']['Orientation'] = 0;
 				break;
-			case 6:
+			case 6: // 180deg
 				$tree[$lv-1]['data'] = imagerotate($tree[$lv-1]['data'], -90, 0);
 				$new_meta['exif_info']['Orientation'] = 0;
 				$new_meta['img_info'][0] = $tree[$lv-1]['metadata']['img_info'][1];
 				$new_meta['img_info'][1] = $tree[$lv-1]['metadata']['img_info'][0];
 				break;
-			case 8:
+			case 8: // -90deg
 				$tree[$lv-1]['data'] = imagerotate($tree[$lv-1]['data'], 90, 0);
 				$new_meta['exif_info']['Orientation'] = 0;
 				$new_meta['img_info'][0] = $tree[$lv-1]['metadata']['img_info'][1];
