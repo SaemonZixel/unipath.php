@@ -36,7 +36,7 @@ $GLOBALS_data_timestamp = array(); // timestamp если были закешир
 $__unipath_php_file = __FILE__; // кто и где мы
 $__uni_version = 2.4; // наша версия
 $__uni_prt_cnt = 100000; // лимит интераций циклов, защитный счётчик от бесконечного зацикливания
-$__uni_optimize = 1; // 0 - off; 1 - optimeze: /abc, ./abc, ./`abc`, .
+$__uni_optimize = 1; // 0 - off; 1 - optimize: /abc, ./abc, ./`abc`, .
 $__uni_benchmark = array(); // для статистики скорости обработки unipath запросов
 
 // режим присвоения значения (исключительно для внутренних нужд)
@@ -317,15 +317,16 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump(__FUNCTION__.": failed");
 	return $tree_node;
 }
 
-class Uni extends ArrayIterator {
+class Uni implements Iterator, ArrayAccess {
 	public $tree = array(); // разобранное и выполненое дерево текущего unipath
 	public $data = null; // текущие данные последнего узла в дереве
 	public $metadata = array('null');
 	public $unipath = null;
-	public $current_cursor_result = null;
+	public $current_cursor_result = M_EULER; // (кастыль для обхода dinamic proterty depricated)
 
 	function __construct($unipath_or_data, $metadata = null) {
-	
+		// if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__.'()');
+
 		// попросили пустой объект
 		if(func_num_args() == 0) {
 			return $this;
@@ -370,7 +371,7 @@ class Uni extends ArrayIterator {
 	}
 	
 	#[\ReturnTypeWillChange]
-	function rewind() { 
+	public function rewind() {
 		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__.'()');
 
 		// просят внутри использовать другой error_reporting режим
@@ -383,7 +384,7 @@ class Uni extends ArrayIterator {
 		if(isset($this->metadata['cursor()'])) {
 			
 			// удалим результыты последнего обхода
-			unset($this->current_cursor_result);
+			$this->current_cursor_result = M_EULER;
 
 			// теперь перемотаем в начало
 			/*$tree_node = array(
@@ -398,7 +399,7 @@ class Uni extends ArrayIterator {
 			// вернём обратно error_reporting
 			isset($old_error_reporting_level) 
 				and error_reporting($old_error_reporting_level);
-			
+
 			return $call_result;
 		}
 		
@@ -414,11 +415,11 @@ class Uni extends ArrayIterator {
 	}
 	
 	#[\ReturnTypeWillChange]
-	function current() { 
+	public function current() {
 		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__.'()');
 
 		// cursor()
-		if(isset($this->current_cursor_result)) {
+		if(isset($this->current_cursor_result) && $this->current_cursor_result != M_EULER) {
 			if(!empty($GLOBALS['unipath_debug']))  trigger_error('Uni->current(): cursor()');
 
 			if(array_key_exists('cursor()', $this->current_cursor_result['metadata']) != false)
@@ -428,7 +429,7 @@ class Uni extends ArrayIterator {
 			else
 				return $this->current_cursor_result['data'];
 		} 
-		elseif(property_exists($this, 'current_cursor_result')) {
+		elseif($this->current_cursor_result != M_EULER) {
 			return null;
 		}
 		
@@ -442,7 +443,7 @@ class Uni extends ArrayIterator {
 	}
 	
 	#[\ReturnTypeWillChange]
-	function key() { 
+	public function key() {
 		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__.'()');
 
 		// cursor()
@@ -461,7 +462,7 @@ class Uni extends ArrayIterator {
 	}
 	
 	#[\ReturnTypeWillChange]
-	function next() { 
+	public function next() {
 		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__.'()');
 
 		// cursor()
@@ -490,14 +491,14 @@ class Uni extends ArrayIterator {
 	}
 	
 	#[\ReturnTypeWillChange]
-	function valid() { 
-		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__."(), property_exists(\$this->current_cursor_result) = ".(property_exists($this, 'current_cursor_result')?'true':'false').', cursor() = '.$this->metadata['cursor()']);
+	public function valid() {
+		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__."(), \$this->current_cursor_result) = ".$this->current_cursor_result.', cursor() = '.$this->metadata['cursor()']);
 
 		// cursor() - сразу возмём следующую строку
 		if(isset($this->metadata['cursor()'])) {
-		
+
 			// ещё не начинали обход - запустим сами
-			if(property_exists($this, 'current_cursor_result') == false)
+			if($this->current_cursor_result == M_EULER)
 				$this->next();
 
 			return empty($this->current_cursor_result) == false;
@@ -513,7 +514,7 @@ class Uni extends ArrayIterator {
 	}
 	
 	#[\ReturnTypeWillChange]
-	function count() { 
+	public function count() {
 		if(!empty($GLOBALS['unipath_debug'])) trigger_error("Uni->".__FUNCTION__.'()');
 
 		// cursor()
@@ -530,13 +531,13 @@ class Uni extends ArrayIterator {
 	}
 
 	#[\ReturnTypeWillChange]
-	function offsetExists($offset_as_unipath) { return true; }
+	public function offsetExists($offset_as_unipath) { return true; }
 
 	#[\ReturnTypeWillChange]
-	function offsetUnset($offset_as_unipath) { return true; }
+	public function offsetUnset($offset_as_unipath) { return true; }
 	
 	#[\ReturnTypeWillChange]
-	function offsetSet($offset_as_unipath, $set_value) {
+	public function offsetSet($offset_as_unipath, $set_value) {
 	
 		// просят внутри использовать другой error_reporting режим
 		if (!empty($GLOBALS['unipath_error_reporting'])) {
@@ -569,7 +570,7 @@ class Uni extends ArrayIterator {
 	}
 	
 	#[\ReturnTypeWillChange]
-	function offsetGet($offset_as_unipath) {
+	public function offsetGet($offset_as_unipath) {
 	
 		// просят внутри использовать другой error_reporting режим
 		if (!empty($GLOBALS['unipath_error_reporting'])) {
@@ -587,14 +588,19 @@ class Uni extends ArrayIterator {
 		// вернём обратно error_reporting
 		if(isset($old_error_reporting_level))
 			error_reporting($old_error_reporting_level);
-			
+
 		if(array_key_exists('cursor()', $uni_result['metadata']) != false)
 			return new Uni($uni_result['data'], $uni_result['metadata']);
 		else
 			return $uni_result['data'];
 	}
+
+	public function getIterator() {
+var_dump(__FILE__.':'.__LINE__);
+		return $this;
+	}
 	
-	function __call($name, $arguments) {
+	public function __call($name, $arguments) {
 		trigger_error("Uni->$name() not exists! (".print_r($argumnets, true).')', E_USER_ERROR);
 	}
 	
@@ -607,17 +613,18 @@ class Uni extends ArrayIterator {
 		// если один аргумент, то всё просто
 		$tree = array(
 			array('name' => '?start_data?', 
-				  'data' => $arguments[0], 
-				  'metadata' => array(gettype($arguments[0]))), 
-			array('name' => $uni_func_name.'()', 
-				  'data' => null));
-		
+				  'data' => empty($arguments) ? null : $arguments[0],
+				  'metadata' => array(empty($arguments) ? 'null' : gettype($arguments[0]))),
+			array('name' => $uni_func_name.'()',
+				  'data' => null)
+		);
 	
 		// если несколько, то надо их передать через $GLOBALS
-		if(count($arguments) > 1) {
+		$tmp_num = 0;
+		if(count($arguments) > 0) {
 			$tree[1]['name'] = array();
 			
-			for($i = 1; $i < count($arguments); $i++) {
+			for($i = 0; $i < count($arguments); $i++) {
 				switch(gettype($arguments[$i])) {
 					case 'string':
 						$tree[1]['name'][] = "```$arguments[$i]```";
@@ -626,7 +633,7 @@ class Uni extends ArrayIterator {
 						$tree[1]['name'][] = $arguments[$i];
 						break;
 					default:
-						for($tmp_num = 1; $tmp_num < 10000; $tmp_num++) {
+						for(; $tmp_num < 10000; $tmp_num++) {
 							if(isset($GLOBALS["unipath_tmp_var$tmp_num"])) continue;
 							
 							$GLOBALS["unipath_tmp_var$tmp_num"] = $arguments[$i];
@@ -640,12 +647,16 @@ class Uni extends ArrayIterator {
 		}
 
 		$result = call_user_func("_uni_{$uni_func_name}", $tree, 1);
+
+		// уберём за собой
+		if ($tmp_num > 0)
+		while($tmp_num--) unset($GLOBALS["unipath_tmp_var$tmp_num"]);
 	
 		return isset($result['data']) ? $result['data'] : null;
 	}
 }
 
-abstract class UniPathExtension { 
+abstract class UniPathExtension {
 	public $tree;
 	public $lv;
 	public $name;
@@ -777,14 +788,14 @@ if(!empty($GLOBALS['unipath_debug'])) {
 		// <PDO-object/odbc-link/mysql-link/mysqli-object>/<table_name>[...]
 		// TODO cache()
 		elseif($lv > 0 and is_string($name)
-			and in_array($prev_data_type, array('object/PDO', 'resource/odbc-link', 'resource/mysql-link', 'object/mysqli')) 
+			and in_array($prev_data_type, array('object/PDO', 'resource/odbc-link', 'resource/mysql-link', 'object/mysqli', 'object/SQLite3'))
 			|| ($prev_data_type == 'object' && get_class($tree[$lv-1]['data']) == 'mysqli')
 			and strpos($name, 'last_error(') === false
 			and strpos($name, 'last_affected_rows(') === false
 			and strpos($name, 'last_insert_id(') === false
 			and strpos($name, 'sql_table_prefix(') === false
 			and !in_array($name, array('.', '..'))) {
-			
+
 				$db = $tree[$lv-1]['data'];
 				$metadata = array('tables' => array(), 'columns' => array());
 				$table_prefix = isset($tree[$lv-1]['metadata']['table_prefix']) ? $tree[$lv-1]['metadata']['table_prefix'] : '';
@@ -852,6 +863,9 @@ if(!empty($GLOBALS['unipath_debug'])) {
 									case 'object/PDO':
 										$filter[$expr]['left_sql'] = $db->quote($filter[$expr]['left']);
 										break;
+									case 'object/SQLite3':
+										$filter[$expr]['left_sql'] = "'".$db->escapeString($filter[$expr]['left'])."'";
+										break;
 									case 'resource/mysql-link':
 										$filter[$expr]['left_sql'] = "'".mysql_real_escape_string($filter[$expr]['left'])."'";
 										break;
@@ -871,26 +885,45 @@ if(!empty($GLOBALS['unipath_debug'])) {
 								$filter[$expr]['left_sql'] = $filter[$filter[$expr]['left']]['sql'];
 								break;
 							case 'function':
-								if(in_array(strpos(strtoupper($filter[$expr]['left']), 'LIKE('), array(0,1))) {
+								if(in_array(stripos($filter[$expr]['left'], 'LIKE('), array(0,1)) and $prev_data_type != 'object/SQLite3') {
 									list($args, $args_types) = __uni_parseFuncArgs($filter[$expr]['left']);
 									
 									if (count($args) < 2) trigger_error(__FUNCTION__.': Not found 1 and/or 2 argument in '.$filter[$expr]['left']);
-									
-									$filter[$expr]['left_sql'] = $args[0].
-										(strtoupper($filter[$expr]['left'][0]) == 'I' ? " ILIKE " : " LIKE ").
-										($args_types[1] == 'string-with-N' ? 'N' : '').
-										"'{$args[1]}'";
-										
+
 									// незабываем про префикс таблицы
 									if(!empty($table_prefix) 
 										and ($dot_pos = strpos($args[0], "."))
 										and array_key_exists($table_prefix.substr($args[0], 0, $dot_pos), $aliases))
-										$filter[$expr]['left_sql'] = $table_prefix.$filter[$expr]['left_sql'];
+										$filter[$expr]['left_sql'] = $table_prefix.$filter[$expr]['left_sql']; // TODO ?
+									// иначе копируем как есть
+									else {
+										// подготовим текстовое поле
+										switch($prev_data_type) {
+											case 'object/PDO':
+												$args[1] = $db->quote($args[1]);
+												break;
+											case 'object/SQLite3':
+												$args[1] = "'".$db->escapeString($args[1])."'";
+												break;
+											case 'resource/mysql-link':
+												$args[1] = "'".mysql_real_escape_string($args[1])."'";
+												break;
+											case 'resource/odbc-link':
+											default:
+												$args[1] = "'".str_replace("'","''",$args[1])."'";
+										}
+										$filter[$expr]['left_sql'] = "`{$args[0]}` ".
+										(strspn($filter[$expr]['left'], 'iI')?"I":"").
+										"LIKE ".
+										($args_types[1] == "string-with-N" ? 'N':'').
+										$args[1];
+									}
 								} 
 								// кастыль для MS SQL Server
 								elseif(substr_compare($filter[$expr]['left'], 'like2(', 0, 5, true) == 0) {
 									$filter[$expr]['left_sql'] = iconv('UTF-8', 'WINDOWS-1251', preg_replace("~like2\(([^,]+),  *(N)?'?([^)']+).*~ui", "$1 LIKE $2'$3'", $filter[$expr]['left']));
-								} else
+								}
+								else
 									$filter[$expr]['left_sql'] = $filter[$expr]['left'];
 								break;
 								
@@ -914,6 +947,9 @@ if(!empty($GLOBALS['unipath_debug'])) {
 								switch($prev_data_type) {
 									case 'object/PDO':
 										$filter[$expr]['right_sql'] = $db->quote($filter[$expr]['right']);
+										break;
+									case 'object/SQLite3':
+										$filter[$expr]['right_sql'] = "'".$db->escapeString($filter[$expr]['right'])."'";
 										break;
 									case 'resource/mysql-link':
 										$filter[$expr]['right_sql'] = "'".mysql_real_escape_string($filter[$expr]['right'])."'";
@@ -946,6 +982,11 @@ if(!empty($GLOBALS['unipath_debug'])) {
 										$filter[$expr]['right_sql'] = "(".implode(', ',
 											array_map(array($db, 'quote'), 
 											$filter[$expr]['right'])).")";
+										break;
+									case 'object/SQLite3':
+										$filter[$expr]['right_sql'] = "('".implode("','",
+											array_map(array($db, 'escapeString'),
+											$filter[$expr]['right']))."')";
 										break;
 									case 'resource/mysql-link':
 										$filter[$expr]['right_sql'] = "('".implode("','",
@@ -1017,6 +1058,9 @@ if(!empty($GLOBALS['unipath_debug'])) {
 									case 'object/PDO':
 										$filter[$expr]['right_sql'] = $db->quote($value);
 										break;
+									case 'object/SQLite3':
+										$filter[$expr]['right_sql'] = "'".$db->escapeString($value)."'";
+										break;
 									case 'resource/mysql-link':
 										$filter[$expr]['right_sql'] = "'".mysql_real_escape_string($value)."'";
 										break;
@@ -1030,6 +1074,9 @@ if(!empty($GLOBALS['unipath_debug'])) {
 									switch($prev_data_type) {
 										case 'object/PDO':
 											$filter[$expr]['right_sql'][] = $db->quote($val);
+											break;
+										case 'object/SQLite3':
+											$filter[$expr]['right_sql'][] = "'".$db->escapeString($val)."'";
 											break;
 										case 'resource/mysql-link':
 											$filter[$expr]['right_sql'][] = "'".mysql_real_escape_string($val)."'";
@@ -3930,8 +3977,6 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('First rewind');
 					$metadata['stmt'] = $res;
 					$metadata['current_pos'] = 0;
 					$cache_item['last_affected_rows()'] = $res->rowCount();
-// 					if(isset($data_tracking['result_cache']))
-// 						$data_tracking['result_cache'] =& $data_tracking['result_cache'];
 				}
 				break;
 			case 'resource/mysql-link':
@@ -3943,8 +3988,6 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('First rewind');
 					$metadata['stmt'] = $res;
 					$metadata['current_pos'] = 0;
 					$cache_item['last_affected_rows()'] = mysql_num_rows($res);
-// 					if(isset($data_tracking['result_cache']))
-// 						$data_tracking['result_cache'] =& $data_tracking['result_cache'];
 				}
 				break;
 			case 'resource/odbc-link':
@@ -3969,8 +4012,6 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('First rewind');
 						$metadata['stmt'] = $res;
 						$metadata['current_pos'] = 0;
 						$cache_item['last_affected_rows()'] = odbc_num_rows($res);
-// 						if(isset($data_tracking['result_cache']))
-// 							$data_tracking['result_cache'] =& $data_tracking['result_cache'];
 					}
 				} 
 				break;
@@ -3986,6 +4027,47 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('First rewind');
 					$cache_item['last_affected_rows()'] = $res->num_rows;
 				}
 			
+				break;
+
+			case 'object/SQLite3':
+				$stmt = $db->prepare($sql_query);
+// if(!empty($GLOBALS['unipath_debug_sql'])) {
+// 				if($GLOBALS['unipath_debug_sql'] == 'simulate')
+// 					$res_execute_result = false;
+// } else {
+				if($stmt) {
+					if (!empty($sql_binds))
+					foreach($sql_binds as $key => $val)
+					switch(gettype($val)) {
+						case 'double': $stmt->bindValue($key, $val, SQLITE3_FLOAT); break;
+						case 'integer': $stmt->bindValue($key, $val, SQLITE3_INTEGER); break;
+						case 'boolean': $stmt->bindValue($key, $val, SQLITE3_INTEGER); break;
+						case 'NULL': $stmt->bindValue($key, $val, SQLITE3_NULL); break;
+						case 'string': $stmt->bindValue($key, $val, SQLITE3_TEXT); break;
+						default:
+							trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): Argument $key is of invalid type ".gettype($val));
+							$stmt->bindValue($key, "$val", SQLITE3_TEXT);
+					}
+
+					$stmt_execute_result = $stmt->execute();
+				}
+// }
+				// сообщим об ошибке в запросе
+				if(!$stmt or isset($stmt_execute_result) and !$stmt_execute_result) {
+					$err_info = array($db->lastErrorCode(), $db->lastErrorMsg());
+					if($err_info[0] == '00000')
+						trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): SQLite3: execute() return false! ($sql_query)", E_USER_NOTICE);
+					else
+						trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): SQLite3: ".implode(';',$err_info)." ($sql_query)", E_USER_NOTICE);
+					$cache_item['last_error()'] = $err_info;
+				}
+
+				// успешно выполнен запрос
+				else {
+					$metadata['stmt'] = $stmt_execute_result;
+					$metadata['current_pos'] = 0;
+					$cache_item['last_affected_rows()'] = $db->changes();
+				}
 				break;
 				
 			default:
@@ -4096,8 +4178,15 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump("UniPath.".__FUNCTION__."($cursor
 						if($row == false) {
 							$metadata['stmt']->closeCursor();
 							$metadata['stmt'] = null;
-if(!empty($GLOBALS['unipath_debug'])) var_dump('UniPath.'.__FUNCTION__.': result_set ended. $metadata = ', $metadata);
+if(!empty($GLOBALS['unipath_debug'])) var_dump('UniPath.'.__FUNCTION__."($cursor_cmd): result_set ended. $metadata = ", $metadata);
 						} 
+						break;
+					case 'object/SQLite3':
+						$row = $metadata['stmt']->fetchArray(SQLITE3_ASSOC);
+						if(empty($row)) {
+							$metadata['stmt']->finalize(); // SQLite3Result
+							$metadata['stmt'] = null;
+						}
 						break;
 					case 'resource/mysql-link':
 						$row = mysql_fetch_assoc($metadata['stmt']);
@@ -4124,7 +4213,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('UniPath.'.__FUNCTION__.': result
 						}
 						break;
 					default:
-						trigger_error("UniPath: ".__FUNCTION__.": Result resource has unknown type! ".gettype($res));
+						trigger_error("UniPath.".__FUNCTION__."($cursor_cmd): Result resource has unknown type! ".$metadata['db_type']);
 				}
 				
 				// если есть строка, добавляем к себе
@@ -4164,7 +4253,7 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('UniPath.'.__FUNCTION__.': result
 		
 		// все строки уже были выгружены из результата и запрос закрыт
 		elseif(is_null($metadata['stmt'])) {
-if(!empty($GLOBALS['unipath_debug'])) var_dump('UniPath.'.__FUNCTION__.": result_set ended. stmt == null.");
+if(!empty($GLOBALS['unipath_debug'])) var_dump('UniPath.'.__FUNCTION__."($cursor_cmd): result_set ended. stmt == null.");
 			if(isset($metadata['result_cache'])) {
 				$metadata['result_cache_info']['rows_count'] = 'all';
 			}
@@ -4174,13 +4263,13 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump('UniPath.'.__FUNCTION__.": result
 		
 		// запрос был неудачный и выгружать из него невозможно
 		elseif($metadata['stmt'] === false) {
-			trigger_error('UniPath.'.__FUNCTION__.": Result set == false!");
+			trigger_error('UniPath.'.__FUNCTION__."($cursor_cmd): Result set == false!");
 			return array();
 		}
 		
 		// что-то не так
 		else {
-			trigger_error('UniPath.'.__FUNCTION__.": nothing to return!");
+			trigger_error('UniPath.'.__FUNCTION__."($cursor_cmd): nothing to return!");
 var_dump(__FUNCTION__.':'.__LINE__.': metadata = ', $metadata);
 			return array();
 		}
@@ -4189,7 +4278,7 @@ var_dump(__FUNCTION__.':'.__LINE__.': metadata = ', $metadata);
 	// EVAL
 	if($cursor_cmd == 'eval') {
 // 		if(strpos($cursor_arg1['name'], 'cache(') !== false) return false;
-		if(strpos($cursor_arg1['name'], '(') !== false
+		if(strpos($cursor_arg1['name']?:'', '(') !== false
 		|| $cursor_arg1['name'] == '.'
 		|| is_numeric($cursor_arg1['name'])) { 
 if(!empty($GLOBALS['unipath_debug'])) var_dump((isset($tree[$lv]['name'])?$tree[$lv]['name']:'?')." -- ".__FUNCTION__.".$cursor_cmd ".(is_array($cursor_arg1)&&isset($cursor_arg1['name'])?$cursor_arg1['name']:'').' - cant process! (return false)');
@@ -4399,6 +4488,27 @@ function __cursor_database_describe_tables($tables, $db, &$cache_item) {
 					break 2;
 				}
 				break;
+
+			case 'object/SQLite3':
+				$res = $db->query("PRAGMA table_info($table)");
+
+				if(!empty($res)) {
+					for($rows = array(); $row = $res->fetchArray(SQLITE3_NUM);) {
+						$rows[$row[1]] = array(
+							'type' => empty($row[2]) ? 'TEXT' : $row[2],
+							 'null' => (bool) $row[3],
+							'default' => $row[4],
+							 'pkey' => $row[5] == 1);
+						$rows["$table.$row[1]"] =& $rows[$row[1]];
+					}
+					$result[$table] = $cache_item['table_structure'][$table] = $rows;
+					$res->finalize();
+				}
+
+				else {
+					trigger_error("UniPath.".__FUNCTION__.": SQLite3 Query: errno={$db->lastErrorCode()}, error={$db->lastErrorMsg()} (".str_replace('?', $table, $sql).")");
+				}
+				break 2;
 				
 			case 'resource/odbc-link':
 				$first_table = $need_describe_table[0];
@@ -4441,7 +4551,7 @@ function __cursor_database_describe_tables($tables, $db, &$cache_item) {
 						} 
 						
 						else {
-							trigger_error("UniPath: ODBC Execute: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
+							trigger_error("UniPath.".__FUNCTION__.": ODBC Execute: odbc_error=".odbc_error($db).", odbc_errormsg=".odbc_errormsg($db));
 						}
 					}
 					
@@ -4464,7 +4574,7 @@ function __cursor_database_describe_tables($tables, $db, &$cache_item) {
 					} 
 						
 					else {
-						trigger_error("UniPath: ".__FUNCTION__.": MySQL Query: mysql_errno=".mysql_errno($db).", mysql_error=".mysql_error($db)." (".str_replace('?', $table, $sql).")");
+						trigger_error("UniPath.".__FUNCTION__.": MySQL Query: mysql_errno=".mysql_errno($db).", mysql_error=".mysql_error($db)." (".str_replace('?', $table, $sql).")");
 					}
 				}
 				break 2;
@@ -4484,12 +4594,12 @@ function __cursor_database_describe_tables($tables, $db, &$cache_item) {
 					} 
 						
 					else {
-						trigger_error("UniPath: ".__FUNCTION__.": MySQLi Query: errno={$db->errno}, error={$db->error} (".str_replace('?', $table, $sql).")");
+						trigger_error("UniPath.".__FUNCTION__.": MySQLi Query: errno={$db->errno}, error={$db->error} (".str_replace('?', $table, $sql).")");
 					}
 				}
 				break 2;
 			default:
-				trigger_error("UniPath: ".__FUNCTION__.": Don`t know how-to work with $db_type");
+				trigger_error("UniPath.".__FUNCTION__.": Don`t know how-to work with $db_type");
 		}
 	}
 	
@@ -4598,12 +4708,12 @@ function __cursor_database_set($tree, $lv, $set_value, $cursor_arg1_metadata = n
 					$sql_upd_set[$table][$name_col] = "NULL";
 								
 				// если числовой
-				elseif(is_numeric($set_value) and $set_value[0] !== '0' and $set_value[0] != '+') 
+				elseif(is_numeric($set_value) and "$set_value"[0] !== '0' and "$set_value"[0] != '+')
 					$sql_upd_set[$table][$name_col] = "$set_value";
 
 				// это мы необрабатываем!
 				elseif(is_array($set_value) or is_object($set_value) or is_resource($set_value)) {
-					trigger_error('UniPath.database_set: '.$name_col.' == '.gettype($set_value).'!!! ('.print_r($set_value, true).')');
+					trigger_error('UniPath.'.__FUNCTION__.': '.$name_col.' == '.gettype($set_value).'!!! ('.print_r($set_value, true).')');
 				} 
 
 				// всё остальное преобразуем в строку и экранируем
@@ -4611,6 +4721,9 @@ function __cursor_database_set($tree, $lv, $set_value, $cursor_arg1_metadata = n
 				switch($db_type) {
 					case 'object/PDO':
 						$sql_upd_set[$table][$name_col] = $db->quote($set_value);
+						break;
+					case 'object/SQLite3':
+						$sql_upd_set[$table][$name_col] = "'".$db->escapeString($set_value)."'";
 						break;
 					case 'resource/mysql-link':
 						$sql_upd_set[$table][$name_col] = "'".mysql_real_escape_string($set_value)."'";
@@ -4715,7 +4828,10 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump($sql_upd_set);
 			else
 			switch($db_type) {
 				case 'object/PDO':
-					$sql_where_expr = $col_name . ' = '. $db->quote(strval($val));
+					$sql_where_expr = "$col_name = ". $db->quote(strval($val));
+					break;
+				case 'object/SQLite3':
+					$sql_where_expr = "$col_name = '". $db->escapeString(strval($val)). "'";
 					break;
 				case 'resource/mysql-link':
 					$sql_where_expr = "$col_name = '".mysql_real_escape_string($val)."'";
@@ -4762,9 +4878,9 @@ if(!empty($GLOBALS['unipath_debug'])) var_dump($sql_upd_set);
 			if(is_array($GLOBALS['unipath_debug_sql']))
 				$GLOBALS['unipath_debug_sql'][] = $sql_upd;
 			elseif (error_reporting() & E_USER_NOTICE)
-				trigger_error('UniPath: '.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
+				trigger_error('UniPath.'.__FUNCTION__.': '.$sql_upd, E_USER_NOTICE);
 			else
-				echo "\nUniPath: ".__FUNCTION__.': '.$sql_upd; // error_reporting(0);
+				echo "\nUniPath.".__FUNCTION__.': '.$sql_upd; // error_reporting(0);
 		}
 
 		$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = null;
@@ -4802,6 +4918,39 @@ if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === '
 					$cache_item['last_error()'] = $cache_item["last_error($table)"] = $err_info;
 				} else {
 					$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = $res->rowCount();
+				}
+				break;
+			case 'object/SQLite3':
+				$stmt = $db->prepare($sql_upd);
+if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate') {
+				$res_execute_result = false;
+} else {
+				if($stmt) {
+					$stmt_execute_result = $stmt->execute();
+				}
+}
+				// отладочный вывод о результате запроса
+				if(isset($GLOBALS['unipath_debug_sql']) and !is_array($GLOBALS['unipath_debug_sql'])) {
+					error_reporting() & E_USER_NOTICE
+						? trigger_error("\$res = ".print_r($stmt, true).", \$res_execute_result = ".(isset($stmt_execute_result)?$stmt_execute_result:'undefined').", rowCount = (unsupported)", E_USER_NOTICE)
+						: var_dump("\$res = ".print_r($stmt, true).", \$res_execute_result = ".(isset($stmt_execute_result)?$stmt_execute_result:'undefined').", rowCount = (unsupported)");
+				}
+
+				// сообщим об ошибке в запросе
+				if(!$stmt or isset($stmt_execute_result) and !$stmt_execute_result) {
+					$err_info = array($db->lastErrorCode(), $db->lastErrorMsg());
+
+					if($err_info[0] == '00000' and isset($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate')
+						/* skip ??? */
+						trigger_error("UniPath.".__FUNCTION__.": SQLite3: unipath_debug_sql = simulate! ($sql_upd)", E_USER_NOTICE);
+					elseif($err_info[0] == '00000')
+						trigger_error("UniPath.".__FUNCTION__.": SQLite3: execute() return false! ($sql_upd)", E_USER_NOTICE);
+					else
+						trigger_error("UniPath.".__FUNCTION__.": SQLite3: ".implode(';',$err_info)." ($sql_upd)", E_USER_NOTICE);
+
+					$cache_item['last_error()'] = $cache_item["last_error($table)"] = $err_info;
+				} else {
+					$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = -1;
 				}
 				break;
 			case 'resource/odbc-link':
@@ -4929,19 +5078,24 @@ function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 			trigger_error('UniPath.'.__FUNCTION__.': $cursor_arg1 is not an array! ('.$tree[$lv]['unipath'].')');
 			return false;
 		}
-	
+
 		$metadata = $tree[$lv]['metadata'];
 		$db = $metadata['db'];
 		$db_type = is_resource($db) 
 			? 'resource/'.str_replace(' ', '-', get_resource_type($db))
 			: (is_object($db) ? 'object/'.get_class($db) : gettype($db));
 		$table = $metadata['from_tables'][0];
-		
+
 		// проверим подключение к базе данных
 		if(!is_resource($db) and !is_object($db)) {
 			trigger_error('UniPath.'.__FUNCTION__.': $db is not resource or object! ('.$tree[$lv]['unipath'].')');
 			return false;
 		}
+
+		// распарсим аргументы
+		list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
+		if(isset($args['sql_insert_mode']))
+			$metadata['sql_insert_mode'] = $args['sql_insert_mode'];
 		
 		// промежуточные результаты хранятся в кеше
 		isset($GLOBALS['__cursor_database']) or $GLOBALS['__cursor_database'] = array();
@@ -4966,6 +5120,9 @@ function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 					case 'object/PDO':
 						$sql_vals[] = $db->quote(strval($val));
 						break;
+					case 'object/SQLite3':
+						$sql_vals[] = "'".$db->escapeString(strval($val))."'";
+						break;
 					case 'resource/mysql-link':
 						$sql_vals[] = "'".mysql_real_escape_string(strval($val))."'";
 						break;
@@ -4982,7 +5139,7 @@ function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 			else
 				$sql_vals[] = strval($val);
 
-		$sql = "INSERT INTO {$table} (".implode(', ', $sql_fileds).") VALUES (".implode(', ', $sql_vals).")";
+		$sql = (isset($metadata['sql_insert_mode']) ? $metadata['sql_insert_mode'] : "INSERT")." INTO {$table} (".implode(', ', $sql_fileds).") VALUES (".implode(', ', $sql_vals).")";
 		
 		if(isset($GLOBALS['unipath_debug_sql'])) {
 			if(is_array($GLOBALS['unipath_debug_sql']))
@@ -5033,6 +5190,45 @@ function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 				$cache_item['last_error()'] = $cache_item["last_error($table)"] = array($db->sqlstate, $db->error, $db->errno);
 			}
 		}
+
+		// SQLite3
+		elseif ($db_type == 'object/SQLite3') {
+			$stmt = $db->prepare($sql);
+
+			// режим симуляции выполнения INSERT
+			if(!empty($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate')
+				$db_execute_result = false;
+			elseif($stmt)
+				$db_execute_result = $stmt->execute();
+
+			// (отладка SQL)
+			if(isset($GLOBALS['unipath_debug_sql'])) {
+				$error_msg = "\$stmt = ".print_r($stmt, true).", \$db_execute_result = ".(isset($db_execute_result)?$db_execute_result:'undefined').", rowCount = ".(is_object($stmt) ? $stmt->changes() : $stmt);
+				error_reporting() & E_USER_NOTICE
+					? trigger_error($error_msg, E_USER_NOTICE)
+					: var_dump($error_msg);
+			}
+
+			if($stmt and !empty($db_execute_result)) {
+				$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = $db->changes();
+				$cache_item['last_insert_id()'] = $cache_item["last_insert_id($table)"] = $db->lastInsertRowID();
+			}
+			else {
+				$err_info = array($db->lastErrorCode(), $db->lastErrorMsg());
+
+				if($err_info[0] == '00000' and isset($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate') {
+					/* skip ??? */
+					trigger_error("UniPath.".__FUNCTION__.": PDO: unipath_debug_sql = simulate! ($sql)", E_USER_NOTICE);
+					var_dump($GLOBALS['unipath_debug_sql']);
+				}
+				elseif($err_info[0] == '00000' and empty($db_execute_result))
+					trigger_error("UniPath.".__FUNCTION__.": PDO: execute() return false! ($sql)", E_USER_NOTICE);
+				else
+					trigger_error("UniPath.".__FUNCTION__.": PDO: ".implode(';',$err_info)." ($sql)", E_USER_NOTICE);
+
+				$cache_item['last_error()'] = $cache_item["last_error($table)"] = $err_info;
+			}
+		}
 		
 		// PDO
 		else {
@@ -5053,7 +5249,8 @@ function _uni_new_row($tree, $lv = 0, $cursor_cmd = null, $cursor_arg1 = null) {
 			if($stmt and !empty($db_execute_result)) {
 				$cache_item['last_affected_rows()'] = $cache_item["last_affected_rows($table)"] = $stmt->rowCount();
 				$cache_item['last_insert_id()'] = $cache_item["last_insert_id($table)"] = $db->lastInsertId();
-			} else {
+			}
+			else {
 				$err_info = $db->errorInfo();
 
 				if($err_info[0] == '00000' and isset($GLOBALS['unipath_debug_sql']) and $GLOBALS['unipath_debug_sql'] === 'simulate') {
@@ -6013,6 +6210,51 @@ function _uni_url($tree, $lv = 0) {
 	return isset($result) ? $result : array('data' => $args[0], 'metadata' => array('string/url'));
 }
 
+function _uni_http_get($tree, $lv = 0)
+{
+	if(in_array($tree[$lv-1]['metadata'][0], array('string/url'))) {
+		$url = $tree[$lv-1]['data'];
+	}
+
+	list($args, $args_types) = __uni_parseFuncArgs($tree[$lv]['name']);
+
+	// HTTP headers
+	$headers = array();
+	foreach($args as $arg_name => $arg_val) {
+		if($args_types[$arg_name] == 'unipath') {
+// $GLOBALS['unipath_debug'] = true;
+			$arg_val = __uni_with_start_data(
+			$tree[$lv-1]['data'], $tree[$lv-1]['metadata'],
+			$tree[$lv-1]['metadata'],
+			$args[$arg_name]);
+// $GLOBALS['unipath_debug'] = false;
+		}
+		switch($arg_name) {
+			case 'url':
+				$url = $arg_val;
+				break;
+			default:
+				$headers[/*$arg_name*/] = "$arg_name: $arg_val";
+		}
+	}
+// print_r($headers);
+	$data = file_get_contents($url, false, stream_context_create(array(
+				'http' => array(
+					'ignore_errors' => '1',
+					'method' => 'GET',
+					// 'method' => 'POST',
+					// 'content' => http_build_query($data),
+					'header' => $headers
+				),
+				"ssl"=>array(
+					"verify_peer"=>false,
+					"verify_peer_name"=>false,
+				)
+			)));
+
+	return array('data' => $data, 'metadata' => array(gettype($data)));
+}
+
 function _uni_open($tree, $lv = 0) {
 	if(in_array($tree[$lv-1]['metadata'][0], array('string/local-pathname', 'string/local-entry'))) {
 		$result = array(
@@ -6533,6 +6775,7 @@ function _uni_wrap($tree, $lv = 0) {
 }
 
 function _uni_asJSON($tree, $lv = 0) {
+	// TODO array/object flag
 	$data = json_decode($tree[$lv-1]['data'], true);
 	return array('data' => $data, 'metadata' => array(gettype($data)));
 }
@@ -7038,7 +7281,7 @@ function _uni_asImageFile($tree, $lv = 0) {
 
 					if ($comment_len and $comment_offset > 0) {
 						$comment = mb_substr($first4K, $comment_offset+4, $comment_len-2, 'ISO-8859-1');
-						if (!isset($img_exif_info))
+						if (!isset($img_exif_info) || !is_array($img_exif_info))
 							$img_exif_info = array('Comment' => $comment);
 						else
 							$img_exif_info['Comment'] = $comment;
@@ -7115,8 +7358,8 @@ function _uni_resize($tree, $lv = 0) {
 	else
 		$resize_mode = $args[2];
 	
-	if (is_resource($tree[$lv-1]["data"]) == false) {
-		trigger_error('UniPath:'.__FUNCTION__.': Not a resource!', E_USER_WARNING);
+	if (is_resource($tree[$lv-1]["data"]) == false && is_object($tree[$lv-1]["data"]) == false) {
+		trigger_error('UniPath:'.__FUNCTION__.': Not a resource/object!', E_USER_WARNING);
 		return array('data' => null, 'metadata' => $tree[$lv-1]['metadata']);
 	}
 	
@@ -7134,11 +7377,11 @@ function _uni_resize($tree, $lv = 0) {
 			} else {
 				if($new_width) {
 					$width = $new_width;
-					$height = $img_info[1] / ($img_info[0] / $new_width);
+					$height = round($img_info[1] / ($img_info[0] / $new_width));
 				}
 				if($new_height and $height > $new_height) {
 					$height = $new_height;
-					$width = $img_info[0] / ($img_info[1] / $new_height);
+					$width = round($img_info[0] / ($img_info[1] / $new_height));
 				}
 			}
 			$im2 = imagecreatetruecolor($width, $height);
@@ -7161,25 +7404,25 @@ function _uni_resize($tree, $lv = 0) {
 			// пропорционально уменьшаем/увеличиваем
 			if($new_width) {
 				$width = $new_width;
-				$height = $img_info[1] / ($img_info[0] / $new_width);
+				$height = round($img_info[1] / ($img_info[0] / $new_width));
 			}
 			if($new_height and $height > $new_height) {
 				$height = $new_height;
-				$width = $img_info[0] / ($img_info[1] / $new_height);
+				$width = round($img_info[0] / ($img_info[1] / $new_height));
 			}
 			$src_x = $src_y = 0;
-			$dst_x = ($new_width - $width) / 2;
-			$dst_y = ($new_height - $height) / 2;
+			$dst_x = round(($new_width - $width) / 2);
+			$dst_y = round(($new_height - $height) / 2);
 			break;
 		case "inbox":
 			$dst_x = $dst_y = $src_x = $src_y = 0;
 			if($new_width) {
 				$width = $new_width;
-				$height = $img_info[1] / ($img_info[0] / $new_width);
+				$height = round($img_info[1] / ($img_info[0] / $new_width));
 			}
 			if($new_height and $height > $new_height) {
 				$height = $new_height;
-				$width = $img_info[0] / ($img_info[1] / $new_height);
+				$width = round($img_info[0] / ($img_info[1] / $new_height));
 			}
 			$im2 = imagecreatetruecolor($width, $height);
 			break;
@@ -7187,11 +7430,11 @@ function _uni_resize($tree, $lv = 0) {
 			$dst_x = $dst_y = $src_x = $src_y = 0;
 			if($new_width) {
 				$width = $new_width;
-				$height = $img_info[1] / ($img_info[0] / $new_width);
+				$height = round($img_info[1] / ($img_info[0] / $new_width));
 			}
 			if($new_height and $height < $new_height) {
 				$height = $new_height;
-				$width = $img_info[0] / ($img_info[1] / $new_height);
+				$width = round($img_info[0] / ($img_info[1] / $new_height));
 			}
 			$im2 = imagecreatetruecolor($width, $height);
 			break;
