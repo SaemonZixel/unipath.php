@@ -656,7 +656,7 @@ var_dump(__FILE__.':'.__LINE__);
 	}
 }
 
-abstract class UniPathExtension {
+abstract class UniPathExtension { 
 	public $tree;
 	public $lv;
 	public $name;
@@ -3029,6 +3029,13 @@ if(!empty($GLOBALS['unipath_debug_parse'])) var_dump('AND/OR detected! - '.$op);
 						continue;
 					};
 					
+					// in (SQL)
+					// TODO =()
+					if(stripos($xpath, 'in ', $p) == $p) {
+						trigger_error("UniPath: __uni_parseUniPath(): use \"=\" operator instead \"in\"!", E_USER_WARNING);
+						trigger_error();
+					};
+
 					// =, >, <, <=, >=, <>, !=
 					if($xpath[$p] == '=' or $xpath[$p] == '>' or $xpath[$p] == '<' or $xpath[$p] == '!') {
 						$op = $xpath[$p++];
